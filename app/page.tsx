@@ -508,6 +508,16 @@ function redoLayouts() { /* no-op for now */ }
         </button>
       </div>
 
+
+<button
+  onClick={() => setShowLibraryEditor(true)}
+  style={{ background: PANEL, color: TEXT, padding: '8px 12px', borderRadius: 8, border: `1px solid ${BORDER}` }}
+  title="Open Library Editor"
+>
+  🛠 Library Editor
+</button>
+
+      
       {/* Add Form */}
       <div
         style={{
