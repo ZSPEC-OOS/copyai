@@ -76,15 +76,11 @@ export default function Page() {
     try {
       const raw = localStorage.getItem(key);
       if (raw) return JSON.parse(raw) as T;
-    } catch {
-      // ignore
-    }
+    } catch {}
     try {
       const rawB = localStorage.getItem(backupKey);
       if (rawB) return JSON.parse(rawB) as T;
-    } catch {
-      // ignore
-    }
+    } catch {}
     return fallback;
   }
 
@@ -111,6 +107,9 @@ export default function Page() {
   );
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryQuery, setLibraryQuery] = useState('');
+
+  // ----------- NEW: Library Editor UI state -----------
+  const [showLibraryEditor, setShowLibraryEditor] = useState(false);
 
   // ----------- Undo / Redo -----------
   type Snapshot = {
@@ -165,7 +164,6 @@ export default function Page() {
 
   // ----------- UI state: temporary expand/collapse per card -----------
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-
   function toggleExpanded(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -694,6 +692,15 @@ export default function Page() {
           el?.focus();
           (el as HTMLInputElement)?.select?.();
         }, 0);
+      } else if (meta && e.shiftKey && key === 'l') {
+        // NEW: Ctrl/Cmd + Shift + L -> open NEW editor
+        e.preventDefault();
+        setShowLibraryEditor(true);
+        setTimeout(() => {
+          const el = document.getElementById('library-editor-search');
+          el?.focus();
+          (el as HTMLInputElement)?.select?.();
+        }, 0);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -701,9 +708,9 @@ export default function Page() {
   }, [
     canUndo,
     canRedo,
-    cards,                 // ensure freshest data for saveLayout()
-    layouts,               // idem
-    currentLayoutTitle     // idem
+    cards,
+    layouts,
+    currentLayoutTitle
   ]);
 
   // ----------- Render -----------
@@ -776,6 +783,19 @@ export default function Page() {
           aria-controls="library-modal"
         >
           📚 Library
+        </button>
+
+        {/* NEW: Second button to open the Library Editor */}
+        <button
+          onClick={() => setShowLibraryEditor(true)}
+          className="focus-ring"
+          style={{ background: PANEL, color: TEXT, padding: '8px 12px', borderRadius: 8, border: `1px solid ${BORDER}` }}
+          title="Open Library Editor (advanced)"
+          aria-haspopup="dialog"
+          aria-expanded={showLibraryEditor}
+          aria-controls="library-editor-modal"
+        >
+          🛠 Library Editor
         </button>
 
         <button
@@ -1075,7 +1095,7 @@ export default function Page() {
         })}
       </div>
 
-      {/* Library Modal (with Import/Export inside) */}
+      {/* Library Modal (existing) */}
       {showLibrary && (
         <div
           id="library-modal"
@@ -1105,6 +1125,7 @@ export default function Page() {
               overflowX: 'hidden'
             }}
           >
+            {/* Header */}
             <div
               style={{
                 display: 'flex',
@@ -1118,12 +1139,9 @@ export default function Page() {
                 maxWidth: '100%'
               }}
             >
-              {/* Left cluster: Import/Export + Search */}
+              {/* Left: Import/Export + Search */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', boxSizing: 'border-box', maxWidth: '100%' }}>
-                <label
-                  style={LIB_BTN_STYLE}
-                  title="Import a layout (JSON file with cards)"
-                >
+                <label style={LIB_BTN_STYLE} title="Import a layout (JSON file with cards)">
                   Import Layout From File
                   <input
                     type="file"
@@ -1136,18 +1154,11 @@ export default function Page() {
                   />
                 </label>
 
-                <button
-                  onClick={exportJSON}
-                  style={LIB_BTN_STYLE}
-                  title="Export current layout as JSON"
-                >
+                <button onClick={exportJSON} style={LIB_BTN_STYLE} title="Export current layout as JSON">
                   Export Current Layout
                 </button>
 
-                <label
-                  style={LIB_BTN_STYLE}
-                  title="Import a saved library (JSON with layouts)"
-                >
+                <label style={LIB_BTN_STYLE} title="Import a saved library (JSON with layouts)">
                   Import Library From File
                   <input
                     type="file"
@@ -1160,15 +1171,10 @@ export default function Page() {
                   />
                 </label>
 
-                <button
-                  onClick={exportLibrary}
-                  style={LIB_BTN_STYLE}
-                  title="Export all saved layouts as JSON"
-                >
+                <button onClick={exportLibrary} style={LIB_BTN_STYLE} title="Export all saved layouts as JSON">
                   Export Library
                 </button>
 
-                {/* Search */}
                 <input
                   id="library-search"
                   value={libraryQuery}
@@ -1195,13 +1201,7 @@ export default function Page() {
               <button
                 onClick={() => setShowLibrary(false)}
                 className="focus-ring"
-                style={{
-                  background: ACCENT,
-                  color: '#fff',
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  fontSize: BUTTON_FONT_SIZE
-                }}
+                style={{ background: ACCENT, color: '#fff', padding: '6px 10px', borderRadius: 8, fontSize: BUTTON_FONT_SIZE }}
               >
                 Close
               </button>
@@ -1209,6 +1209,7 @@ export default function Page() {
 
             {layouts.length === 0 && <div style={{ opacity: .7 }}>(Library is empty)</div>}
 
+            {/* List */}
             <div role="list" aria-label="Saved layouts" style={{ display: 'grid', gap: 8 }}>
               {filteredLayouts.map((l) => {
                 const isOver = dragLayoutOverId === l.id && dragLayoutId !== l.id;
@@ -1236,59 +1237,159 @@ export default function Page() {
                     }}
                     aria-label={`Layout: ${l.title}`}
                   >
-                    {/* Left block: title + timestamp */}
                     <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontWeight: 600,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}
-                        title={l.title}
-                      >
+                      <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.title}>
                         {l.isPinned ? '📌 ' : ''}{l.title}
                       </div>
                       <div style={{ opacity: .6, fontSize: 12 }}>Saved: {fmt(l.savedAt)} • {l.cards.length} cards</div>
                     </div>
 
-                    {/* Right block: buttons */}
                     <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
-                      <button
-                        onClick={() => openLayout(l.id)}
-                        className="focus-ring"
-                        style={{ background: ACCENT, color: '#fff', padding: '6px 10px', borderRadius: 8 }}
-                      >
+                      <button onClick={() => openLayout(l.id)} className="focus-ring" style={{ background: ACCENT, color: '#fff', padding: '6px 10px', borderRadius: 8 }}>
                         Open
                       </button>
-                      <button
-                        onClick={() => togglePinLayout(l.id)}
-                        className="focus-ring"
-                        style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}
-                        title={l.isPinned ? 'Unpin' : 'Pin'}
-                        aria-pressed={!!l.isPinned}
-                      >
+                      <button onClick={() => togglePinLayout(l.id)} className="focus-ring" style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }} title={l.isPinned ? 'Unpin' : 'Pin'} aria-pressed={!!l.isPinned}>
                         {l.isPinned ? 'Unpin' : 'Pin'}
                       </button>
-                      <button
-                        onClick={() => duplicateLayout(l.id)}
-                        className="focus-ring"
-                        style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}
-                        title="Duplicate layout"
-                      >
+                      <button onClick={() => duplicateLayout(l.id)} className="focus-ring" style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }} title="Duplicate layout">
                         Duplicate
                       </button>
-                      <button
-                        onClick={() => deleteLayout(l.id)}
-                        className="focus-ring"
-                        style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}
-                      >
+                      <button onClick={() => deleteLayout(l.id)} className="focus-ring" style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}>
                         Delete
                       </button>
                     </div>
                   </div>
                 );
               })}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Library Editor Modal (advanced) */}
+      {showLibraryEditor && (
+        <div
+          id="library-editor-modal"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowLibraryEditor(false)}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)',
+            display: 'grid', placeItems: 'center', zIndex: 10001,
+            boxSizing: 'border-box', maxWidth: '100%', overflow: 'hidden'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: PANEL,
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+              width: 'min(1000px, 96vw)',
+              maxHeight: '86vh',
+              overflow: 'auto',
+              padding: '16px 14px 16px',
+              boxSizing: 'border-box',
+              maxWidth: '96vw',
+              overflowX: 'hidden'
+            }}
+          >
+            {/* Editor Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ fontWeight: 700 }}>Library Editor</div>
+                <input
+                  id="library-editor-search"
+                  value={libraryQuery}
+                  onChange={(e) => setLibraryQuery(e.target.value)}
+                  placeholder="Search (title, tags, card text)…"
+                  className="focus-ring"
+                  style={{
+                    background: SURFACE,
+                    color: TEXT,
+                    border: `1px solid ${BORDER}`,
+                    borderRadius: 8,
+                    padding: '6px 10px',
+                    fontSize: BUTTON_FONT_SIZE,
+                    minWidth: 240
+                  }}
+                  aria-label="Search layouts"
+                />
+                <div aria-live="polite" style={{ opacity: .6, fontSize: 12 }}>
+                  {filteredLayouts.length} / {layouts.length}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setShowLibraryEditor(false)} className="focus-ring" style={{ background: ACCENT, color: '#fff', padding: '6px 10px', borderRadius: 8, fontSize: BUTTON_FONT_SIZE }}>
+                  Close Editor
+                </button>
+              </div>
+            </div>
+
+            {/* Editor Body (re-uses the same list; expand here with richer editing as needed) */}
+            <div role="list" aria-label="Library editor list" style={{ display: 'grid', gap: 8 }}>
+              {filteredLayouts.map((l) => {
+                const isOver = dragLayoutOverId === l.id && dragLayoutId !== l.id;
+                return (
+                  <div
+                    role="listitem"
+                    key={l.id}
+                    tabIndex={0}
+                    draggable
+                    onDragStart={(e) => onLayoutDragStart(e, l.id)}
+                    onDragOver={(e) => onLayoutDragOver(e, l.id)}
+                    onDrop={(e) => onLayoutDrop(e, l.id)}
+                    className={`focus-ring${isOver ? ' ghost-outline' : ''}`}
+                    style={{
+                      padding: '10px 12px',
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: 8,
+                      display: 'grid',
+                      gap: 8,
+                      cursor: 'move'
+                    }}
+                    aria-label={`Layout row: ${l.title}`}
+                  >
+                    {/* Top row: title + meta */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between', minWidth: 0 }}>
+                      <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.title}>
+                          {l.isPinned ? '📌 ' : ''}{l.title}
+                        </div>
+                        <div style={{ opacity: .6, fontSize: 12 }}>
+                          Saved: {fmt(l.savedAt)} • {l.cards.length} cards {l.tags?.length ? `• tags: ${l.tags.join(', ')}` : ''}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
+                        <button onClick={() => openLayout(l.id)} className="focus-ring" style={{ background: ACCENT, color: '#fff', padding: '6px 10px', borderRadius: 8 }}>Open</button>
+                        <button onClick={() => togglePinLayout(l.id)} className="focus-ring" style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }} aria-pressed={!!l.isPinned}>{l.isPinned ? 'Unpin' : 'Pin'}</button>
+                        <button onClick={() => duplicateLayout(l.id)} className="focus-ring" style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}>Duplicate</button>
+                        <button onClick={() => deleteLayout(l.id)} className="focus-ring" style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}>Delete</button>
+                      </div>
+                    </div>
+
+                    {/* Cards preview (compact) */}
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      {l.cards.slice(0, 3).map((c) => (
+                        <div key={c.id} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6, padding: 8 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.title || 'Untitled'}</div>
+                          <div style={{ fontSize: 12, opacity: .8, maxHeight: 60, overflow: 'hidden', whiteSpace: 'pre-line' }}>
+                            {c.text}
+                          </div>
+                        </div>
+                      ))}
+                      {l.cards.length > 3 && (
+                        <div style={{ fontSize: 12, opacity: .7 }}>…and {l.cards.length - 3} more</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredLayouts.length === 0 && (
+                <div style={{ opacity: .7, textAlign: 'center', padding: 12 }}>(No layouts match your search.)</div>
+              )}
             </div>
 
           </div>
