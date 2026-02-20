@@ -93,11 +93,6 @@ function snapshotLayouts() { /* no-op for now */ }
 function undoLayouts() { /* no-op for now */ }
 function redoLayouts() { /* no-op for now */ }
 
-  // ----------- NEW: Library Editor overlay + Undo/Redo stacks -----------
-  const [showLibraryEditor, setShowLibraryEditor] = useState(false);
-  const [history, setHistory] = useState<LayoutEntry[][]>([]);
-  const [future, setFuture] = useState<LayoutEntry[][]>([]);
-
   function deepCloneLayouts(src: LayoutEntry[]): LayoutEntry[] {
     return src.map(l => ({
       ...l,
