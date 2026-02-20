@@ -1,16 +1,14 @@
+
 'use client';
 
 import Image from 'next/image';
-import type React from 'react';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 
-/** ---------------- Types (expanded to support tags & pinning) ---------------- */
 type Card = {
   id: string;
   title: string;
   text: string;
   createdAt: number;
-  tags?: string[];
 };
 
 type LayoutEntry = {
@@ -18,11 +16,8 @@ type LayoutEntry = {
   title: string;
   savedAt: number; // epoch ms
   cards: Card[];
-  tags?: string[];
-  isPinned?: boolean;
 };
 
-/** ---------------- Theme tokens (from your existing page) ---------------- */
 const BG = 'var(--bg)';
 const PANEL = 'var(--panel)';
 const SURFACE = 'var(--surface)';
@@ -83,49 +78,6 @@ export default function Page() {
     return [];
   });
   const [showLibrary, setShowLibrary] = useState(false);
-
-  // ----------- NEW: Library Editor overlay + Undo/Redo stacks -----------
-  const [showLibraryEditor, setShowLibraryEditor] = useState(false);
-  const [history, setHistory] = useState<LayoutEntry[][]>([]);
-  const [future, setFuture] = useState<LayoutEntry[][]>([]);
-
-  function deepCloneLayouts(src: LayoutEntry[]): LayoutEntry[] {
-    return src.map(l => ({
-      ...l,
-      cards: l.cards.map(c => ({ ...c }))
-    }));
-  }
-
-  function snapshotLayouts() {
-    // Push current layouts before a mutating action
-    setHistory((h) => [...h, deepCloneLayouts(layouts)]);
-    // New action invalidates redo stack
-    setFuture([]);
-  }
-
-  function undoLayouts() {
-    setHistory((h) => {
-      if (h.length === 0) return h;
-      const prev = h[h.length - 1];
-      setFuture((f) => [deepCloneLayouts(layouts), ...f]);
-      setLayouts(deepCloneLayouts(prev));
-      return h.slice(0, -1);
-    });
-  }
-
-  function redoLayouts() {
-    setFuture((f) => {
-      if (f.length === 0) return f;
-      const next = f[0];
-      setHistory((h) => [...h, deepCloneLayouts(layouts)]);
-      setLayouts(deepCloneLayouts(next));
-      return f.slice(1);
-    });
-  }
-
-  function touchSavedAt(id: string) {
-    setLayouts(prev => prev.map(l => l.id === id ? { ...l, savedAt: Date.now() } : l));
-  }
 
   // ----------- UI state: temporary expand/collapse per card -----------
   // Not persisted; resets on reload.
@@ -295,36 +247,57 @@ export default function Page() {
     URL.revokeObjectURL(url);
   }
 
-  // UPDATED: Export Library preserving tags & isPinned
-  function exportLibrary() {
-    const payload = JSON.stringify({ layouts }, null, 2);
+ function exportLibrary() {
+  const payload = JSON.stringify({ layouts }, null, 2);
 
-    // Primary: modern clipboard API
-    navigator.clipboard.writeText(payload)
-      .then(() => {
+  // Primary: modern clipboard API
+  navigator.clipboard.writeText(payload)
+    .then(() => {
+      toast('✅ Library copied to clipboard');
+    })
+    .catch(() => {
+      // Fallback: create a hidden textarea and copy via execCommand
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = payload;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        ta.setAttribute('readonly', 'true');
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
         toast('✅ Library copied to clipboard');
-      })
-      .catch(() => {
-        // Fallback: create a hidden textarea and copy via execCommand
-        try {
-          const ta = document.createElement('textarea');
-          ta.value = payload;
-          ta.style.position = 'fixed';
-          ta.style.left = '-9999px';
-          ta.setAttribute('readonly', 'true');
-          document.body.appendChild(ta);
-          ta.select();
-          document.execCommand('copy');
-          document.body.removeChild(ta);
-          toast('✅ Library copied to clipboard');
-        } catch {
-          // Last resort: show an alert so user can copy manually
-          alert('Copy failed. Your browser may block clipboard access.\n\nHere is the library JSON so you can copy it manually:\n\n' + payload);
-        }
-      });
+      } catch {
+        // Last resort: show an alert so user can copy manually
+        alert('Copy failed. Your browser may block clipboard access.\n\nHere is the library JSON so you can copy it manually:\n\n' + payload);
+      }
+    });
+}
+
+
+  function importJSON(file: File) {
+    file.text().then(t => {
+      const data = JSON.parse(t);
+      if (!data || !Array.isArray(data.cards)) {
+        alert('Invalid file');
+        return;
+      }
+      const norm: Card[] = data.cards.map((c: any, i: number) => ({
+        id: String(c.id ?? 'c' + Date.now() + i),
+        title: String(c.title ?? 'Untitled'),
+        text: String(c.text ?? ''),
+        createdAt: Number.isFinite(+c.createdAt) ? +c.createdAt : Date.now() - i
+      }));
+      // Oldest at top, newest at bottom
+      norm.sort((a, b) => a.createdAt - b.createdAt);
+      setCards(norm);
+      setExpanded(new Set()); // reset temp expansion on import
+      toast('📥 Imported');
+    }).catch(() => alert('Failed to read file'));
   }
 
-  // UPDATED: Import Library preserving tags & isPinned and using snapshots for undo
+  // New: Import Library (layouts) from file
   function importLibrary(file: File) {
     file.text().then(t => {
       let data: any;
@@ -353,8 +326,7 @@ export default function Page() {
           id: String(c?.id ?? 'c' + Date.now() + '_' + li + '_' + i),
           title: String(c?.title ?? 'Untitled'),
           text: String(c?.text ?? ''),
-          createdAt: Number.isFinite(+c?.createdAt) ? +c.createdAt : (Date.now() - i),
-          tags: Array.isArray(c?.tags) ? c.tags.map(String) : []
+          createdAt: Number.isFinite(+c?.createdAt) ? +c.createdAt : (Date.now() - i)
         })) : [];
 
         // Sort oldest->newest
@@ -372,9 +344,7 @@ export default function Page() {
           id: 'L' + Date.now() + '_' + li,
           title: uniqueTitle,
           savedAt,
-          cards: cardsArr,
-          tags: Array.isArray(l?.tags) ? l.tags.map(String) : [],
-          isPinned: Boolean(l?.isPinned)
+          cards: cardsArr
         };
       });
 
@@ -383,7 +353,6 @@ export default function Page() {
         return;
       }
 
-      snapshotLayouts();
       setLayouts(prev => [...prev, ...normalized]);
       toast(`📚 Imported ${normalized.length} layout${normalized.length > 1 ? 's' : ''}`);
     }).catch(() => alert('Failed to read file'));
@@ -422,23 +391,6 @@ export default function Page() {
     wordBreak: 'break-word'
   };
 
-  /** ---------------- Optional: global keyboard shortcuts for undo/redo ---------------- */
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const key = e.key.toLowerCase();
-      const mod = e.ctrlKey || e.metaKey;
-      if (mod && key === 'z') {
-        e.preventDefault();
-        undoLayouts();
-      } else if (mod && key === 'y') {
-        e.preventDefault();
-        redoLayouts();
-      }
-    }
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layouts]);
   // ----------- Render -----------
   return (
     <div
@@ -818,540 +770,79 @@ export default function Page() {
                 </button>
               </div>
 
-              {/* Right cluster: Library Editor + Close */}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={() => setShowLibraryEditor(true)}
-                  style={{
-                    background: PANEL,
-                    color: TEXT,
-                    padding: '6px 10px',
-                    borderRadius: 8,
-                    border: `1px solid ${BORDER}`,
-                    fontSize: BUTTON_FONT_SIZE
-                  }}
-                  title="Open Library Editor"
-                >
-                  Library Editor
-                </button>
-                <button
-                  onClick={() => setShowLibrary(false)}
-                  style={{
-                    background: ACCENT,
-                    color: '#fff',
-                    padding: '6px 10px',
-                    borderRadius: 8,
-                    fontSize: BUTTON_FONT_SIZE
-                  }}
-                  title="Close library"
-                >
-                  Close
-                </button>
-              </div>
+              {/* Right: Close (purple) */}
+              <button
+                onClick={() => setShowLibrary(false)}
+                style={{
+                  background: ACCENT,
+                  color: '#fff',
+                  padding: '6px 10px',
+                  borderRadius: 8,
+                  fontSize: BUTTON_FONT_SIZE
+                }}
+              >
+                Close
+              </button>
             </div>
 
             {layouts.length === 0 && <div style={{ opacity: .7 }}>(Library is empty)</div>}
 
             <div style={{ display: 'grid', gap: 8 }}>
-              {layouts.map(l => (
-                <div
-                  key={l.id}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '10px 12px',               // inset so buttons don't touch the rounded edge
-                    borderBottom: `1px solid ${BORDER}`,
-                    borderRadius: 8,                    // optional: softens row corners visually
-                    boxSizing: 'border-box',
-                    width: '100%',
-                    gap: 8,
-                    overflow: 'hidden'                  // prevents accidental horizontal overflow within row
-                  }}
-                >
-                  {/* Left block: title + timestamp (flexible, shrinks as needed) */}
-                  <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontWeight: 600,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}
-                      title={l.title}
-                    >
-                      {l.title}
-                    </div>
-                    <div style={{ opacity: .6, fontSize: 12 }}>Saved: {fmt(l.savedAt)}</div>
-                  </div>
-
-                  {/* Right block: buttons (fixed width) */}
-                  <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
-                    <button
-                      onClick={() => openLayout(l.id)}
-                      style={{ background: ACCENT, color: '#fff', padding: '6px 10px', borderRadius: 8 }}
-                    >
-                      Open
-                    </button>
-                    <button
-                      onClick={() => deleteLayout(l.id)}
-                      style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-          </div>
-        </div>
-      )}
-
-      {/* NEW: Library Editor Overlay (mobile-first) */}
-      {showLibraryEditor && (
-        <LibraryEditor
-          layouts={layouts}
-          setLayouts={(updater) => {
-            snapshotLayouts();
-            setLayouts(typeof updater === 'function' ? (updater as any)(layouts) : updater);
-          }}
-          onOpen={(id) => {
-            openLayout(id);
-            setShowLibraryEditor(false);
-          }}
-          onClose={() => setShowLibraryEditor(false)}
-          undo={undoLayouts}
-          redo={redoLayouts}
-          canUndo={history.length > 0}
-          canRedo={future.length > 0}
-          exportLibrary={exportLibrary}
-          importLibraryFile={importLibrary}
-          colors={{ BG, PANEL, SURFACE, BORDER, TEXT, ACCENT }}
-        />
-      )}
-    </div>
-  );
-}
-/** ---------------------------------------------------------------
- * Library Editor Overlay
- * - Search/filter across titles, tags, and card titles
- * - Inline editing (layout title, card title/text)
- * - Pin, duplicate, delete, open
- * - Drag & drop reorder (layouts; cards within layout)
- * - Undo/Redo wiring provided by parent
- * --------------------------------------------------------------- */
-function LibraryEditor(props: {
-  layouts: LayoutEntry[];
-  setLayouts: React.Dispatch<React.SetStateAction<LayoutEntry[]>>;
-  onOpen: (layoutId: string) => void;
-  onClose: () => void;
-  undo: () => void;
-  redo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
-  exportLibrary: () => void;
-  importLibraryFile: (file: File) => void;
-  colors: { BG: string; PANEL: string; SURFACE: string; BORDER: string; TEXT: string; ACCENT: string; };
-}) {
-  const { layouts, setLayouts, onOpen, onClose, undo, redo, canUndo, canRedo, exportLibrary, importLibraryFile, colors } = props;
-
-  // Mobile-first editor state
-  const [query, setQuery] = useState('');
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set()); // per-layout card list toggle
-
-  // Auto-save “heartbeat” to mirror desktop’s auto-save intent (localStorage is already persisted by parent)
-  useEffect(() => {
-    const t = setInterval(() => {/* noop: parent already persists via useEffect */}, 30000);
-    return () => clearInterval(t);
-  }, []);
-
-  const filtered = layouts
-    .slice()
-    .sort((a, b) => {
-      // Pinned first, then by savedAt desc
-      const ap = a.isPinned ? 1 : 0;
-      const bp = b.isPinned ? 1 : 0;
-      if (ap !== bp) return bp - ap;
-      return b.savedAt - a.savedAt;
-    })
-    .filter(l => {
-      const q = query.trim().toLowerCase();
-      if (!q) return true;
-      const hay = [
-        l.title,
-        ...(l.tags || []),
-        ...l.cards.flatMap(c => [c.title, ...(c.tags || [])])
-      ].join(' ').toLowerCase();
-      return hay.includes(q);
-    });
-
-  function toggleExpanded(id: string) {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
-  function renameLayout(id: string, title: string) {
-    setLayouts(prev => prev.map(l => l.id === id ? { ...l, title: (title || 'Untitled').slice(0, 200), savedAt: Date.now() } : l));
-  }
-
-  function togglePin(id: string) {
-    setLayouts(prev => prev.map(l => l.id === id ? { ...l, isPinned: !l.isPinned, savedAt: Date.now() } : l));
-  }
-
-  function duplicateLayout(id: string) {
-    setLayouts(prev => {
-      const idx = prev.findIndex(l => l.id === id);
-      if (idx < 0) return prev;
-      const src = prev[idx];
-      const cloned: LayoutEntry = {
-        ...src,
-        id: 'L' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-        title: `${src.title} (Copy)`,
-        savedAt: Date.now(),
-        cards: src.cards.map(c => ({
-          ...c,
-          id: 'c' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-          createdAt: Date.now()
-        }))
-      };
-      const next = prev.slice();
-      next.splice(idx + 1, 0, cloned);
-      return next;
-    });
-  }
-
-  function deleteLayout(id: string) {
-    if (!confirm('Delete this layout?')) return;
-    setLayouts(prev => prev.filter(l => l.id !== id));
-  }
-
-  // --- Drag & Drop for layouts ---
-  const dragLayoutId = useRef<string | null>(null);
-  function onLayoutDragStart(e: React.DragEvent, id: string) {
-    dragLayoutId.current = id;
-    e.dataTransfer.effectAllowed = 'move';
-  }
-  function onLayoutDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }
-  function onLayoutDrop(e: React.DragEvent, overId: string) {
-    e.preventDefault();
-    const fromId = dragLayoutId.current;
-    dragLayoutId.current = null;
-    if (!fromId || fromId === overId) return;
-    // Reorder in the filtered view while preserving non-filtered relative order:
-    setLayouts(prev => {
-      // Build visible ids list based on current filter/sort
-      const vis = filtered.map(l => l.id);
-      const from = vis.indexOf(fromId);
-      const to = vis.indexOf(overId);
-      if (from < 0 || to < 0 || from === to) return prev;
-
-      // Map: visible ids to actual layouts in their new visible order
-      const reorderedVisible = vis.slice();
-      const [moved] = reorderedVisible.splice(from, 1);
-      reorderedVisible.splice(to, 0, moved);
-
-      // Stitch: walk original array, replace visible ones in that sequence, keep invisible in place
-      const visibleSet = new Set(vis);
-      const byId = new Map(prev.map(l => [l.id, l]));
-      const iterator = reorderedVisible.values();
-      const next: LayoutEntry[] = [];
-      for (const layout of prev) {
-        if (visibleSet.has(layout.id)) {
-          const nid = iterator.next().value as string;
-          next.push(byId.get(nid)!);
-        } else {
-          next.push(layout);
-        }
-      }
-      return next;
-    });
-  }
-
-  // --- Card helpers ---
-  function addCard(layoutId: string) {
-    setLayouts(prev => prev.map(l => l.id === layoutId ? {
-      ...l,
-      savedAt: Date.now(),
-      cards: [...l.cards, { id: 'c' + Date.now(), title: 'New Card', text: '', createdAt: Date.now(), tags: [] }]
-    } : l));
-  }
-
-  function updateCard(layoutId: string, cardId: string, patch: Partial<Card>) {
-    setLayouts(prev => prev.map(l => {
-      if (l.id !== layoutId) return l;
-      return {
-        ...l,
-        savedAt: Date.now(),
-        cards: l.cards.map(c => c.id === cardId ? { ...c, ...patch } : c)
-      };
-    }));
-  }
-
-  function deleteCard(layoutId: string, cardId: string) {
-    if (!confirm('Delete this card?')) return;
-    setLayouts(prev => prev.map(l => l.id === layoutId ? {
-      ...l,
-      savedAt: Date.now(),
-      cards: l.cards.filter(c => c.id !== cardId)
-    } : l));
-  }
-
-  // Drag & Drop for cards (within a layout)
-  const dragCard = useRef<{ layoutId: string; cardId: string } | null>(null);
-  function onCardDragStart(e: React.DragEvent, layoutId: string, cardId: string) {
-    dragCard.current = { layoutId, cardId };
-    e.dataTransfer.effectAllowed = 'move';
-  }
-  function onCardDragOver(e: React.DragEvent) {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  }
-  function onCardDrop(e: React.DragEvent, overLayoutId: string, overCardId: string) {
-    e.preventDefault();
-    const payload = dragCard.current;
-    dragCard.current = null;
-    if (!payload) return;
-    const { layoutId: fromL, cardId: fromC } = payload;
-    setLayouts(prev => {
-      // Only support reordering within the same layout for now (could extend across layouts)
-      if (fromL !== overLayoutId) return prev;
-      return prev.map(l => {
-        if (l.id !== fromL) return l;
-        const ids = l.cards.map(c => c.id);
-        const fromIdx = ids.indexOf(fromC);
-        const toIdx = ids.indexOf(overCardId);
-        if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return l;
-        const nextCards = l.cards.slice();
-        const [moved] = nextCards.splice(fromIdx, 1);
-        nextCards.splice(toIdx, 0, moved);
-        return { ...l, cards: nextCards, savedAt: Date.now() };
-      });
-    });
-  }
-
-  // Styles
-  const WRAP: React.CSSProperties = {
-    position: 'fixed', inset: 0, zIndex: 10050, display: 'grid', gridTemplateRows: 'auto 1fr',
-    background: colors.BG
-  };
-  const HDR: React.CSSProperties = {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    gap: 8, padding: '10px 12px', background: colors.PANEL, borderBottom: `1px solid ${colors.BORDER}`
-  };
-  const BTN: React.CSSProperties = {
-    background: colors.PANEL, color: colors.TEXT, padding: '8px 10px', borderRadius: 8,
-    border: `1px solid ${colors.BORDER}`, fontSize: 14
-  };
-  const BTN_ACCENT: React.CSSProperties = {
-    background: colors.ACCENT, color: '#fff', padding: '8px 10px', borderRadius: 8, border: 'none', fontSize: 14
-  };
-  const TAG: React.CSSProperties = {
-    display: 'inline-block', padding: '2px 6px', borderRadius: 6, border: `1px solid ${colors.BORDER}`,
-    background: colors.SURFACE, color: colors.TEXT, fontSize: 12
-  };
-
-  return (
-    <div role="dialog" aria-modal="true" aria-label="Library Editor" style={WRAP}>
-      {/* Header */}
-      <div style={HDR}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-          <button onClick={onClose} style={BTN} aria-label="Close editor">← Back</button>
-          <div style={{ fontWeight: 700, fontSize: 16, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            Library Editor
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search layouts, tags, card titles…"
-            aria-label="Search"
-            style={{
-              background: colors.SURFACE, color: colors.TEXT, border: `1px solid ${colors.BORDER}`,
-              borderRadius: 8, padding: '8px 10px', minWidth: 160
-            }}
-          />
-          <button onClick={undo} style={{ ...BTN, opacity: canUndo ? 1 : 0.5 }} disabled={!canUndo} title="Undo (Ctrl+Z)">
-            ↶ Undo
-          </button>
-          <button onClick={redo} style={{ ...BTN, opacity: canRedo ? 1 : 0.5 }} disabled={!canRedo} title="Redo (Ctrl+Y)">
-            ↷ Redo
-          </button>
-
-          <label style={BTN} title="Import Library From File">
-            Import
-            <input
-              type="file"
-              accept="application/json"
-              hidden
-              onChange={(e) => e.target.files && importLibraryFile(e.target.files[0])}
-            />
-          </label>
-          <button onClick={exportLibrary} style={BTN} title="Export Library">Export</button>
-          <button onClick={onClose} style={BTN_ACCENT} title="Close">Close</button>
-        </div>
-      </div>
-
-      {/* Body: list of layouts */}
+   
+{layouts.map(l => (
+  <div
+    key={l.id}
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      padding: '10px 12px',               // inset so buttons don't touch the rounded edge
+      borderBottom: `1px solid ${BORDER}`,
+      borderRadius: 8,                    // optional: softens row corners visually
+      boxSizing: 'border-box',
+      width: '100%',
+      gap: 8,
+      overflow: 'hidden'                  // prevents accidental horizontal overflow within row
+    }}
+  >
+    {/* Left block: title + timestamp (flexible, shrinks as needed) */}
+    <div style={{ flex: '1 1 auto', minWidth: 0 }}>
       <div
         style={{
-          overflow: 'auto',
-          padding: 12,
-          display: 'grid',
-          gap: 10,
-          alignContent: 'start'
+          fontWeight: 600,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
         }}
+        title={l.title}
       >
-        {filtered.length === 0 && (
-          <div style={{ opacity: .7, textAlign: 'center', padding: 24 }}>
-            (No matching layouts)
-          </div>
-        )}
-
-        {filtered.map(l => {
-          const isOpen = expanded.has(l.id);
-          return (
-            <div
-              key={l.id}
-              role="group"
-              aria-label={`Layout ${l.title}`}
-              draggable
-              onDragStart={(e) => onLayoutDragStart(e, l.id)}
-              onDragOver={onLayoutDragOver}
-              onDrop={(e) => onLayoutDrop(e, l.id)}
-              style={{
-                background: colors.SURFACE,
-                border: `1px solid ${colors.BORDER}`,
-                borderRadius: 12,
-                padding: 10,
-                display: 'grid',
-                gap: 8
-              }}
-            >
-              {/* Row: Title / meta / actions */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span title="Drag to reorder" aria-hidden>≡</span>
-                <input
-                  value={l.title}
-                  onChange={(e) => renameLayout(l.id, e.target.value)}
-                  onBlur={(e) => renameLayout(l.id, e.target.value.trim())}
-                  aria-label="Layout title"
-                  style={{
-                    flex: 1, minWidth: 0,
-                    background: colors.BG, color: colors.TEXT, border: `1px solid ${colors.BORDER}`,
-                    borderRadius: 8, padding: '6px 8px', fontWeight: 700
-                  }}
-                />
-                {l.isPinned && <span style={TAG} title="Pinned">📌 Pinned</span>}
-                <span style={{ opacity: .6, fontSize: 12 }} title="Last saved">
-                  {new Date(l.savedAt).toLocaleString()}
-                </span>
-              </div>
-
-              {/* Tags (optional) */}
-              {l.tags && l.tags.length > 0 && (
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {l.tags.map((t, i) => <span key={i} style={TAG}>#{t}</span>)}
-                </div>
-              )}
-
-              {/* Buttons */}
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                <button onClick={() => togglePin(l.id)} style={BTN}>{l.isPinned ? 'Unpin' : 'Pin'}</button>
-                <button onClick={() => onOpen(l.id)} style={BTN_ACCENT}>Open</button>
-                <button onClick={() => duplicateLayout(l.id)} style={BTN}>Duplicate</button>
-                <button onClick={() => deleteLayout(l.id)} style={BTN}>Delete</button>
-                <button onClick={() => toggleExpanded(l.id)} style={BTN}>
-                  {isOpen ? 'Hide Cards' : `Show Cards (${l.cards.length})`}
-                </button>
-              </div>
-
-              {/* Card list */}
-              {isOpen && (
-                <div style={{ display: 'grid', gap: 8 }}>
-                  {l.cards.length === 0 && (
-                    <div style={{ opacity: .7, paddingLeft: 22 }}>(No cards)</div>
-                  )}
-                  {l.cards.map((c) => (
-                    <div
-                      key={c.id}
-                      draggable
-                      onDragStart={(e) => onCardDragStart(e, l.id, c.id)}
-                      onDragOver={onCardDragOver}
-                      onDrop={(e) => onCardDrop(e, l.id, c.id)}
-                      style={{
-                        background: colors.BG,
-                        border: `1px solid ${colors.BORDER}`,
-                        borderRadius: 10,
-                        padding: 8,
-                        display: 'grid',
-                        gap: 6
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span aria-hidden title="Drag to reorder">⋮⋮</span>
-                        <input
-                          value={c.title}
-                          onChange={(e) => updateCard(l.id, c.id, { title: e.target.value.slice(0, 200) })}
-                          placeholder="Card title"
-                          aria-label="Card title"
-                          style={{
-                            flex: 1, minWidth: 0,
-                            background: colors.SURFACE, color: colors.TEXT, border: `1px solid ${colors.BORDER}`,
-                            borderRadius: 8, padding: '6px 8px', fontWeight: 600
-                          }}
-                        />
-                        <button onClick={() => deleteCard(l.id, c.id)} style={BTN} title="Delete card">Delete</button>
-                      </div>
-
-                      <textarea
-                        value={c.text}
-                        onChange={(e) => updateCard(l.id, c.id, { text: e.target.value.slice(0, 50000) })}
-                        placeholder="Card text…"
-                        aria-label="Card text"
-                        rows={4}
-                        style={{
-                          width: '100%',
-                          resize: 'vertical',
-                          background: colors.SURFACE,
-                          color: colors.TEXT,
-                          border: `1px solid ${colors.BORDER}`,
-                          borderRadius: 8,
-                          padding: 8,
-                          boxSizing: 'border-box'
-                        }}
-                      />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ opacity: .6, fontSize: 12 }}>
-                          Created: {new Date(c.createdAt).toLocaleString()}
-                        </div>
-                        <button
-                          onClick={() => navigator.clipboard.writeText(c.text)}
-                          style={BTN}
-                          title="Copy card text"
-                        >
-                          Copy
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <div>
-                    <button onClick={() => addCard(l.id)} style={BTN_ACCENT}>+ Add Card</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {l.title}
       </div>
+      <div style={{ opacity: .6, fontSize: 12 }}>Saved: {fmt(l.savedAt)}</div>
+    </div>
+
+    {/* Right block: buttons (fixed width) */}
+    <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
+      <button
+        onClick={() => openLayout(l.id)}
+        style={{ background: ACCENT, color: '#fff', padding: '6px 10px', borderRadius: 8 }}
+      >
+        Open
+      </button>
+      <button
+        onClick={() => deleteLayout(l.id)}
+        style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}
+      >
+        Delete
+      </button>
+    </div>
+  </div>
+))}
+
+            </div>
+
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-``
