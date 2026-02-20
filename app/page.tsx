@@ -83,15 +83,11 @@ export default function Page() {
     return [];
   });
   const [showLibrary, setShowLibrary] = useState(false);
-  // --- Library Editor overlay toggle ---
-const [showLibraryEditor, setShowLibraryEditor] = useState(false);
 
-// Optional: if you don't have undo/redo wiring yet, keep these no-ops / placeholders
-const history: LayoutEntry[][] = [];
-const future: LayoutEntry[][] = [];
-function snapshotLayouts() { /* no-op for now */ }
-function undoLayouts() { /* no-op for now */ }
-function redoLayouts() { /* no-op for now */ }
+  // ----------- NEW: Library Editor overlay + Undo/Redo stacks -----------
+  const [showLibraryEditor, setShowLibraryEditor] = useState(false);
+  const [history, setHistory] = useState<LayoutEntry[][]>([]);
+  const [future, setFuture] = useState<LayoutEntry[][]>([]);
 
   function deepCloneLayouts(src: LayoutEntry[]): LayoutEntry[] {
     return src.map(l => ({
@@ -503,16 +499,6 @@ function redoLayouts() { /* no-op for now */ }
         </button>
       </div>
 
-
-<button
-  onClick={() => setShowLibraryEditor(true)}
-  style={{ background: PANEL, color: TEXT, padding: '8px 12px', borderRadius: 8, border: `1px solid ${BORDER}` }}
-  title="Open Library Editor"
->
-  🛠 Library Editor
-</button>
-
-      
       {/* Add Form */}
       <div
         style={{
