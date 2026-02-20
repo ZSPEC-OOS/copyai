@@ -1,14 +1,13 @@
 'use client';
 
 import Image from 'next/image';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Card = {
   id: string;
   title: string;
   text: string;
   createdAt: number;
-  // Optional extension for future tags
   tags?: string[];
 };
 
@@ -17,7 +16,6 @@ type LayoutEntry = {
   title: string;
   savedAt: number; // epoch ms
   cards: Card[];
-  // Extensions to align with Python app behavior:
   tags?: string[];
   isPinned?: boolean;
 };
@@ -60,10 +58,6 @@ const deepClone = <T,>(obj: T): T => {
   return JSON.parse(JSON.stringify(obj));
 };
 
-function now() {
-  return Date.now();
-}
-
 function fmt(ts: number) {
   const d = new Date(ts);
   return d.toLocaleString();
@@ -76,7 +70,6 @@ function needsClamp(txt: string): boolean {
   return lineCount > 3 || txt.length > 240;
 }
 
-// ---------- Component ----------
 export default function Page() {
   // ----------- Crash-resistant loaders -----------
   function loadJSON<T>(key: string, backupKey: string, fallback: T): T {
@@ -86,7 +79,6 @@ export default function Page() {
     } catch {
       // ignore
     }
-    // Fallback to backup
     try {
       const rawB = localStorage.getItem(backupKey);
       if (rawB) return JSON.parse(rawB) as T;
@@ -97,7 +89,10 @@ export default function Page() {
   }
 
   // ----------- State: cards on the page -----------
-  const [cards, setCards] = useState<Card[]>(() => loadJSON<Card[]>('copyai_cards', 'copyai_cards_backup', []));
+  const [cards, setCards] = useState<Card[]>(() =>
+    loadJSON<Card[]>('copyai_cards', 'copyai_cards_backup', [])
+  );
+
   // Layout title (kept for logic; not displayed)
   const [currentLayoutTitle, setCurrentLayoutTitle] = useState<string>('');
 
@@ -125,7 +120,8 @@ export default function Page() {
   };
   const [history, setHistory] = useState<Snapshot[]>([]);
   const [future, setFuture] = useState<Snapshot[]>([]);
-  const lastInteractionAtRef = useRef<number>(now());
+  const canUndo = history.length > 0;
+  const canRedo = future.length > 0;
 
   function snapshot() {
     setHistory((prev) => [
@@ -139,7 +135,10 @@ export default function Page() {
     setHistory((prev) => {
       if (prev.length === 0) return prev;
       const last = prev[prev.length - 1];
-      setFuture((fr) => [...fr, { cards: deepClone(cards), layouts: deepClone(layouts), currentLayoutTitle }]);
+      setFuture((fr) => [
+        ...fr,
+        { cards: deepClone(cards), layouts: deepClone(layouts), currentLayoutTitle }
+      ]);
       setCards(last.cards);
       setLayouts(last.layouts);
       setCurrentLayoutTitle(last.currentLayoutTitle);
@@ -152,7 +151,10 @@ export default function Page() {
     setFuture((fr) => {
       if (fr.length === 0) return fr;
       const next = fr[fr.length - 1];
-      setHistory((h) => [...h, { cards: deepClone(cards), layouts: deepClone(layouts), currentLayoutTitle }]);
+      setHistory((h) => [
+        ...h,
+        { cards: deepClone(cards), layouts: deepClone(layouts), currentLayoutTitle }
+      ]);
       setCards(next.cards);
       setLayouts(next.layouts);
       setCurrentLayoutTitle(next.currentLayoutTitle);
@@ -161,11 +163,7 @@ export default function Page() {
     });
   }
 
-  const canUndo = history.length > 0;
-  const canRedo = future.length > 0;
-
   // ----------- UI state: temporary expand/collapse per card -----------
-  // Not persisted; resets on reload.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   function toggleExpanded(id: string) {
@@ -229,7 +227,7 @@ export default function Page() {
 
   function nextUniqueTitle(base: string): string {
     const titles = new Set(layouts.map((l) => l.title));
-    let t = (base.trim() || 'Untitled');
+    let t = base.trim() || 'Untitled';
     while (titles.has(t)) t = t + '-2';
     return t;
   }
@@ -245,7 +243,6 @@ export default function Page() {
     snapshot();
     const id = 'c' + Date.now();
     const newCard: Card = { id, title: t || 'Untitled', text: x, createdAt: Date.now() };
-    // Append to bottom
     setCards((prev) => [...prev, newCard]);
     setTitle('');
     setText('');
@@ -303,9 +300,8 @@ export default function Page() {
 
   function onCardDragStart(e: React.DragEvent, id: string) {
     setDragCardId(id);
-    dragCopyGuardRef.current = true; // prevent click-to-copy on drag
+    dragCopyGuardRef.current = true;
     e.dataTransfer.effectAllowed = 'move';
-    // Minimal drag image offset to avoid ugly default
     try {
       const crt = document.createElement('div');
       crt.style.padding = '4px 8px';
@@ -347,7 +343,7 @@ export default function Page() {
   }
 
   function onCardDragEnd() {
-    setTimeout(() => (dragCopyGuardRef.current = false), 0); // allow copying again
+    setTimeout(() => (dragCopyGuardRef.current = false), 0);
   }
 
   // ----------- Layout actions: Save / Open / Delete / Pin / Duplicate -----------
@@ -378,7 +374,7 @@ export default function Page() {
     setCards(lay.cards);
     setCurrentLayoutTitle(lay.title);
     setShowLibrary(false);
-    setExpanded(new Set()); // reset temp expansion on open
+    setExpanded(new Set());
     toast(`📂 Opened: ${lay.title}`);
   }
 
@@ -438,13 +434,11 @@ export default function Page() {
   function exportLibrary() {
     const payload = JSON.stringify({ layouts }, null, 2);
 
-    // Primary: modern clipboard API
     navigator.clipboard.writeText(payload)
       .then(() => {
         toast('✅ Library copied to clipboard');
       })
       .catch(() => {
-        // Fallback: create a hidden textarea and copy via execCommand
         try {
           const ta = document.createElement('textarea');
           ta.value = payload;
@@ -457,7 +451,6 @@ export default function Page() {
           document.body.removeChild(ta);
           toast('✅ Library copied to clipboard');
         } catch {
-          // Last resort: show an alert so user can copy manually
           alert(
             'Copy failed. Your browser may block clipboard access.\n\nHere is the library JSON so you can copy it manually:\n\n' +
             payload
@@ -480,16 +473,14 @@ export default function Page() {
         createdAt: Number.isFinite(+c.createdAt) ? +c.createdAt : Date.now() - i,
         tags: Array.isArray(c?.tags) ? c.tags : undefined
       }));
-      // Oldest at top, newest at bottom
       norm.sort((a, b) => a.createdAt - b.createdAt);
       snapshot();
       setCards(norm);
-      setExpanded(new Set()); // reset temp expansion on import
+      setExpanded(new Set());
       toast('📥 Imported');
     }).catch(() => alert('Failed to read file'));
   }
 
-  // New: Import Library (layouts) from file
   function importLibrary(file: File) {
     file.text().then(t => {
       let data: any;
@@ -500,20 +491,15 @@ export default function Page() {
         return;
       }
 
-      // Accept common shapes:
-      // - { layouts: [...] }
-      // - [ ... ] (array of layouts)
       const incoming = Array.isArray(data) ? data : data?.layouts;
       if (!Array.isArray(incoming)) {
         alert('Invalid library file (expected { "layouts": [...] })');
         return;
       }
 
-      // Build a set of existing titles to avoid collisions
       const existingTitles = new Set(layouts.map(l => l.title));
 
       const normalized: LayoutEntry[] = incoming.map((l: any, li: number) => {
-        // normalize cards
         const cardsArr: Card[] = Array.isArray(l?.cards) ? l.cards.map((c: any, i: number) => ({
           id: String(c?.id ?? 'c' + Date.now() + '_' + li + '_' + i),
           title: String(c?.title ?? 'Untitled'),
@@ -522,10 +508,8 @@ export default function Page() {
           tags: Array.isArray(c?.tags) ? c.tags : undefined
         })) : [];
 
-        // Sort oldest->newest
         cardsArr.sort((a, b) => a.createdAt - b.createdAt);
 
-        // Title uniqueness across existing + within this import
         let baseTitle = String(l?.title ?? 'Untitled');
         let uniqueTitle = baseTitle.trim() || 'Untitled';
         while (existingTitles.has(uniqueTitle)) uniqueTitle = uniqueTitle + '-2';
@@ -559,14 +543,15 @@ export default function Page() {
   const PREVIEW_LINES = 3;
   const PREVIEW_HEIGHT = `calc(${LINE_HEIGHT}em * ${PREVIEW_LINES})`;
 
-  // Collapsed preview: fixed height (equal for all), 3 lines visible, rest hidden
   const previewCollapsedStyle: React.CSSProperties = {
     whiteSpace: 'pre-line',
     display: '-webkit-box',
+    // @ts-ignore vendor prop not in React types across all versions
     WebkitLineClamp: PREVIEW_LINES as unknown as number,
-    WebkitBoxOrient: 'vertical' as unknown as 'vertical',
+    // @ts-ignore vendor prop not in React types across all versions
+    WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
-    lineHeight: LINE_HEIGHT as unknown as string,
+    lineHeight: LINE_HEIGHT,
     height: PREVIEW_HEIGHT,
     opacity: 1,
     boxSizing: 'border-box',
@@ -575,19 +560,18 @@ export default function Page() {
     wordBreak: 'break-word'
   };
 
-  // Expanded view: full text
   const previewExpandedStyle: React.CSSProperties = {
     whiteSpace: 'pre-wrap',
     display: 'block',
     overflow: 'visible',
-    lineHeight: LINE_HEIGHT as unknown as string,
+    lineHeight: LINE_HEIGHT,
     boxSizing: 'border-box',
     maxWidth: '100%',
     overflowWrap: 'anywhere',
     wordBreak: 'break-word'
   };
 
-  // ----------- Library filtering & reordering -----------
+  // ----------- Library filtering -----------
   const filteredLayouts = useMemo(() => {
     const q = libraryQuery.trim().toLowerCase();
     if (!q) return layouts;
@@ -600,29 +584,42 @@ export default function Page() {
           c.text.toLowerCase().includes(q) ||
           (c.tags || []).some((t) => String(t).toLowerCase().includes(q))
       );
-      return titleHit || tagsHit || cardsHit;
+    return titleHit || tagsHit || cardsHit;
     });
   }, [layouts, libraryQuery]);
 
-  function reorderVisibleLayouts(startPos: number, targetPos: number) {
-    // Build visible actual indices
-    const visibleIndices = filteredLayouts.map((l) => layouts.findIndex((x) => x.id === l.id)).filter((i) => i >= 0);
-    if (startPos === targetPos || startPos < 0 || targetPos < 0 || startPos >= visibleIndices.length || targetPos > visibleIndices.length) {
-      return;
-    }
-    const newVisible = visibleIndices.slice();
-    const [moved] = newVisible.splice(startPos, 1);
-    newVisible.splice(targetPos, 0, moved);
+  // ----------- Reorder visible layouts (helper) -----------
+  const reorderVisibleLayouts = useCallback(
+    (startPos: number, targetPos: number) => {
+      // Build visible indices based on current full list
+      const visibleIndices = filteredLayouts
+        .map(l => layouts.findIndex(x => x.id === l.id))
+        .filter(i => i >= 0);
 
-    const visibleSet = new Set(visibleIndices);
-    const reorderedVisibleLayouts = newVisible.map((idx) => layouts[idx]);
-    const it = reorderedVisibleLayoutsSymbol.iterator;
+      if (
+        startPos === targetPos ||
+        startPos < 0 ||
+        targetPos < 0 ||
+        startPos >= visibleIndices.length ||
+        targetPos > visibleIndices.length
+      ) {
+        return;
+      }
 
-    const rebuilt: LayoutEntry[] = layouts.map((l, idx) => (visibleSet.has(idx) ? it.next().value! : l));
-    setLayouts(rebuilt);
-  }
+      const newVisible = visibleIndices.slice();
+      const [moved] = newVisible.splice(startPos, 1);
+      newVisible.splice(targetPos, 0, moved);
 
-  // DnD state for layouts (library modal)
+      const visibleSet = new Set(visibleIndices);
+      const reorderedVisibleLayouts = newVisible.map(i => layouts[i]);
+      const it = reorderedVisibleLayoutsSymbol.iterator;
+
+      setLayouts(prev => prev.map((l, idx) => (visibleSet.has(idx) ? it.next().value! : l)));
+    },
+    [filteredLayouts, layouts]
+  );
+
+  // ----------- DnD state for layouts (library modal) -----------
   const [dragLayoutId, setDragLayoutId] = useState<string | null>(null);
   const [dragLayoutOverId, setDragLayoutOverId] = useState<string | null>(null);
 
@@ -671,7 +668,6 @@ export default function Page() {
         e.preventDefault();
         if (canRedo) redo();
       } else if (meta && key === 'f') {
-        // Open Library and focus search
         e.preventDefault();
         setShowLibrary(true);
         setTimeout(() => {
@@ -691,7 +687,7 @@ export default function Page() {
       style={{
         minHeight: '100svh',
         padding: 12,
-        overflowX: 'hidden', // vertical scroll only
+        overflowX: 'hidden',
         boxSizing: 'border-box',
         maxWidth: '100%',
       }}
@@ -720,7 +716,7 @@ export default function Page() {
           overflow: 'hidden'
         }}
       >
-        {/* Logo + App Name (CopyAI visible) */}
+        {/* Logo + App Name */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Image
             src="/copyai_logo.png"
@@ -730,15 +726,11 @@ export default function Page() {
             priority
             style={{ display: 'block' }}
           />
-          <div style={{ fontWeight: 700, fontSize: 20 }}>
-            CopyAI
-          </div>
+          <div style={{ fontWeight: 700, fontSize: 20 }}>CopyAI</div>
         </div>
 
-        {/* Spacer pushes the buttons to the right */}
         <div style={{ marginLeft: 'auto' }} />
 
-        {/* Primary actions aligned to the right */}
         <button
           onClick={saveLayout}
           className="focus-ring"
@@ -812,10 +804,9 @@ export default function Page() {
           marginBottom: 16,
           boxSizing: 'border-box',
           maxWidth: '100%',
-          overflow: 'hidden' // ensures rounded corners are always respected
+          overflow: 'hidden'
         }}
       >
-        {/* No section title */}
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -907,8 +898,7 @@ export default function Page() {
               onClick={(e) => {
                 if (isEditing) return;
                 if ((e.target as HTMLElement).closest('[data-nocopy]')) return;
-                if (dragCopyGuardRef.current) return; // prevent copy on drag
-                // Copy full text on card click (primary behavior)
+                if (dragCopyGuardRef.current) return;
                 copyNow(c.text);
               }}
               className={`focus-ring${isDragOver ? ' ghost-outline' : ''}`}
@@ -919,7 +909,6 @@ export default function Page() {
                 padding: 12,
                 boxSizing: 'border-box',
                 maxWidth: '100%',
-                // Critical: Clip children so rounded corners are always respected
                 overflow: 'hidden',
                 cursor: isEditing ? 'default' : 'move'
               }}
@@ -999,7 +988,6 @@ export default function Page() {
                       position: 'relative',
                       boxSizing: 'border-box',
                       maxWidth: '100%',
-                      // Ensure toggle never sits outside rounded clipping
                       paddingBottom: showToggle ? 28 : 0
                     }}
                   >
@@ -1016,7 +1004,7 @@ export default function Page() {
                       <button
                         data-nocopy
                         onClick={(e) => {
-                          e.stopPropagation(); // do not copy text when toggling
+                          e.stopPropagation();
                           toggleExpanded(c.id);
                         }}
                         aria-label={isExpanded ? 'Show less' : 'Show more'}
@@ -1024,8 +1012,8 @@ export default function Page() {
                         className="focus-ring"
                         style={{
                           position: 'absolute',
-                          right: 8, // inset to keep away from the clipped edge
-                          bottom: 8, // inset to keep away from the clipped edge
+                          right: 8,
+                          bottom: 8,
                           background: PANEL,
                           color: TEXT,
                           border: `1px solid ${BORDER}`,
@@ -1083,19 +1071,15 @@ export default function Page() {
               background: PANEL,
               border: `1px solid ${BORDER}`,
               borderRadius: 12,
-              width: 'min(880px, 92vw)',  // widened a bit
+              width: 'min(880px, 92vw)',
               maxHeight: '80vh',
-              // Scroll stays inside rounded container:
               overflow: 'auto',
               padding: '16px 14px 16px',
               boxSizing: 'border-box',
               maxWidth: '92vw',
-              // Clip to preserve rounded corners at all times
-              overflowClipMargin: '0px', // harmless if unsupported
               overflowX: 'hidden'
             }}
           >
-            {/* Header: actions + search + close */}
             <div
               style={{
                 display: 'flex',
@@ -1109,9 +1093,8 @@ export default function Page() {
                 maxWidth: '100%'
               }}
             >
-              {/* Left cluster: Import / Export Current Layout / Import Library / Export Library */}
+              {/* Left cluster: Import/Export + Search */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', boxSizing: 'border-box', maxWidth: '100%' }}>
-                {/* Import current layout (cards) */}
                 <label
                   style={LIB_BTN_STYLE}
                   title="Import a layout (JSON file with cards)"
@@ -1125,7 +1108,6 @@ export default function Page() {
                   />
                 </label>
 
-                {/* Export current layout (cards) */}
                 <button
                   onClick={exportJSON}
                   style={LIB_BTN_STYLE}
@@ -1134,7 +1116,6 @@ export default function Page() {
                   Export Current Layout
                 </button>
 
-                {/* NEW: Import Library (layouts) — placed to the LEFT of Export Library */}
                 <label
                   style={LIB_BTN_STYLE}
                   title="Import a saved library (JSON with layouts)"
@@ -1148,7 +1129,6 @@ export default function Page() {
                   />
                 </label>
 
-                {/* Export Library (layouts) */}
                 <button
                   onClick={exportLibrary}
                   style={LIB_BTN_STYLE}
@@ -1157,7 +1137,7 @@ export default function Page() {
                   Export Library
                 </button>
 
-                {/* Search box */}
+                {/* Search */}
                 <input
                   id="library-search"
                   value={libraryQuery}
@@ -1180,7 +1160,7 @@ export default function Page() {
                 </div>
               </div>
 
-              {/* Right: Close (purple) */}
+              {/* Right: Close */}
               <button
                 onClick={() => setShowLibrary(false)}
                 className="focus-ring"
@@ -1199,7 +1179,7 @@ export default function Page() {
             {layouts.length === 0 && <div style={{ opacity: .7 }}>(Library is empty)</div>}
 
             <div role="list" aria-label="Saved layouts" style={{ display: 'grid', gap: 8 }}>
-              {filteredLayouts.map((l, idx) => {
+              {filteredLayouts.map((l) => {
                 const isOver = dragLayoutOverId === l.id && dragLayoutId !== l.id;
                 return (
                   <div
@@ -1214,18 +1194,18 @@ export default function Page() {
                     style={{
                       display: 'flex',
                       alignItems: 'center',
-                      padding: '10px 12px',               // inset so buttons don't touch the rounded edge
+                      padding: '10px 12px',
                       borderBottom: `1px solid ${BORDER}`,
-                      borderRadius: 8,                    // optional: softens row corners visually
+                      borderRadius: 8,
                       boxSizing: 'border-box',
                       width: '100%',
                       gap: 8,
-                      overflow: 'hidden',                 // prevents accidental horizontal overflow within row
+                      overflow: 'hidden',
                       cursor: 'move'
                     }}
                     aria-label={`Layout: ${l.title}`}
                   >
-                    {/* Left block: title + timestamp (flexible, shrinks as needed) */}
+                    {/* Left block: title + timestamp */}
                     <div style={{ flex: '1 1 auto', minWidth: 0 }}>
                       <div
                         style={{
@@ -1241,7 +1221,7 @@ export default function Page() {
                       <div style={{ opacity: .6, fontSize: 12 }}>Saved: {fmt(l.savedAt)} • {l.cards.length} cards</div>
                     </div>
 
-                    {/* Right block: buttons (fixed width) */}
+                    {/* Right block: buttons */}
                     <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
                       <button
                         onClick={() => openLayout(l.id)}
@@ -1250,7 +1230,6 @@ export default function Page() {
                       >
                         Open
                       </button>
-
                       <button
                         onClick={() => togglePinLayout(l.id)}
                         className="focus-ring"
@@ -1260,7 +1239,6 @@ export default function Page() {
                       >
                         {l.isPinned ? 'Unpin' : 'Pin'}
                       </button>
-
                       <button
                         onClick={() => duplicateLayout(l.id)}
                         className="focus-ring"
@@ -1269,7 +1247,6 @@ export default function Page() {
                       >
                         Duplicate
                       </button>
-
                       <button
                         onClick={() => deleteLayout(l.id)}
                         className="focus-ring"
