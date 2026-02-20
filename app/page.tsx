@@ -83,6 +83,15 @@ export default function Page() {
     return [];
   });
   const [showLibrary, setShowLibrary] = useState(false);
+  // --- Library Editor overlay toggle ---
+const [showLibraryEditor, setShowLibraryEditor] = useState(false);
+
+// Optional: if you don't have undo/redo wiring yet, keep these no-ops / placeholders
+const history: LayoutEntry[][] = [];
+const future: LayoutEntry[][] = [];
+function snapshotLayouts() { /* no-op for now */ }
+function undoLayouts() { /* no-op for now */ }
+function redoLayouts() { /* no-op for now */ }
 
   // ----------- NEW: Library Editor overlay + Undo/Redo stacks -----------
   const [showLibraryEditor, setShowLibraryEditor] = useState(false);
