@@ -211,7 +211,7 @@ export default function Page() {
       overflow: 'hidden',
       whiteSpace: 'nowrap',
       textOverflow: 'ellipsis'
-    } as CSSStyleDeclaration);
+    } as Partial<CSSStyleDeclaration>);
     document.body.appendChild(el);
     setTimeout(() => el.remove(), ms);
   }
@@ -221,7 +221,20 @@ export default function Page() {
       await navigator.clipboard.writeText(value);
       toast('✅ Copied');
     } catch {
-      alert('Clipboard failed');
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = value;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        ta.setAttribute('readonly', 'true');
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        toast('✅ Copied');
+      } catch {
+        alert('Clipboard failed');
+      }
     }
   }
 
@@ -584,14 +597,14 @@ export default function Page() {
           c.text.toLowerCase().includes(q) ||
           (c.tags || []).some((t) => String(t).toLowerCase().includes(q))
       );
-    return titleHit || tagsHit || cardsHit;
+      return titleHit || tagsHit || cardsHit;
     });
   }, [layouts, libraryQuery]);
 
   // ----------- Reorder visible layouts (helper) -----------
   const reorderVisibleLayouts = useCallback(
     (startPos: number, targetPos: number) => {
-      // Build visible indices based on current full list
+      // Map visible layouts -> indices in the full layouts array
       const visibleIndices = filteredLayouts
         .map(l => layouts.findIndex(x => x.id === l.id))
         .filter(i => i >= 0);
@@ -601,20 +614,29 @@ export default function Page() {
         startPos < 0 ||
         targetPos < 0 ||
         startPos >= visibleIndices.length ||
-        targetPos > visibleIndices.length
+        targetPos >= visibleIndices.length
       ) {
         return;
       }
 
-      const newVisible = visibleIndices.slice();
-      const [moved] = newVisible.splice(startPos, 1);
-      newVisible.splice(targetPos, 0, moved);
+      // New order of visible *indices* after moving one
+      const newOrderOfVisible = visibleIndices.slice();
+      const [moved] = newOrderOfVisible.splice(startPos, 1);
+      newOrderOfVisible.splice(targetPos, 0, moved);
 
-      const visibleSet = new Set(visibleIndices);
-      const reorderedVisibleLayouts = newVisible.map(i => layouts[i]);
-      const it = reorderedVisibleLayoutsSymbol.iterator;
+      setLayouts(prev => {
+        const next = prev.slice();
 
-      setLayouts(prev => prev.map((l, idx) => (visibleSet.has(idx) ? it.next().value! : l)));
+        // Items that should occupy the visible positions in the new order
+        const itemsInNewOrder = newOrderOfVisible.map(idx => next[idx]);
+
+        // Write them back into the same set of positions (visibleIndices)
+        visibleIndices.forEach((pos, i) => {
+          next[pos] = itemsInNewOrder[i];
+        });
+
+        return next;
+      });
     },
     [filteredLayouts, layouts]
   );
@@ -679,7 +701,7 @@ export default function Page() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [canUndo, canRedo, cards, layouts, currentLayoutTitle]);
+  }, [canUndo, canRedo, /* note: actions refer to latest state by closures above */]);
 
   // ----------- Render -----------
   return (
@@ -1104,7 +1126,10 @@ export default function Page() {
                     type="file"
                     accept="application/json"
                     hidden
-                    onChange={(e) => e.target.files && importJSON(e.target.files[0])}
+                    onChange={(e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) importJSON(file);
+                    }}
                   />
                 </label>
 
@@ -1125,7 +1150,10 @@ export default function Page() {
                     type="file"
                     accept="application/json"
                     hidden
-                    onChange={(e) => e.target.files && importLibrary(e.target.files[0])}
+                    onChange={(e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) importLibrary(file);
+                    }}
                   />
                 </label>
 
@@ -1242,9 +1270,7 @@ export default function Page() {
                       <button
                         onClick={() => duplicateLayout(l.id)}
                         className="focus-ring"
-                        style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}
-                        title="Duplicate layout"
-                      >
+                        style >
                         Duplicate
                       </button>
                       <button
