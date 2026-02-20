@@ -626,15 +626,12 @@ export default function Page() {
 
       setLayouts(prev => {
         const next = prev.slice();
-
-        // Items that should occupy the visible positions in the new order
+        // Items to place into the visible slots, captured before writes
         const itemsInNewOrder = newOrderOfVisible.map(idx => next[idx]);
-
-        // Write them back into the same set of positions (visibleIndices)
+        // Write back into the same visible positions in the new order
         visibleIndices.forEach((pos, i) => {
           next[pos] = itemsInNewOrder[i];
         });
-
         return next;
       });
     },
@@ -701,7 +698,13 @@ export default function Page() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [canUndo, canRedo, /* note: actions refer to latest state by closures above */]);
+  }, [
+    canUndo,
+    canRedo,
+    cards,                 // ensure freshest data for saveLayout()
+    layouts,               // idem
+    currentLayoutTitle     // idem
+  ]);
 
   // ----------- Render -----------
   return (
@@ -1270,7 +1273,9 @@ export default function Page() {
                       <button
                         onClick={() => duplicateLayout(l.id)}
                         className="focus-ring"
-                        style >
+                        style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}
+                        title="Duplicate layout"
+                      >
                         Duplicate
                       </button>
                       <button
