@@ -98,14 +98,16 @@ export default function Page() {
   // Load from Firestore once after login
   useEffect(() => {
     if (!loggedIn) return;
-    getDoc(doc(db, 'users', 'jesse')).then(snap => {
-      if (snap.exists()) {
-        const data = snap.data();
-        if (data.cards) setCards(data.cards as Card[]);
-        if (data.layouts) setLayouts(data.layouts as LayoutEntry[]);
-      }
-      setDataLoaded(true);
-    });
+    getDoc(doc(db, 'users', 'jesse'))
+      .then(snap => {
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.cards) setCards(data.cards as Card[]);
+          if (data.layouts) setLayouts(data.layouts as LayoutEntry[]);
+        }
+      })
+      .catch(e => console.error('Firestore load error:', e))
+      .finally(() => setDataLoaded(true));
   }, [loggedIn]);
 
   // Save cards to Firestore whenever they change (after initial load)
@@ -437,7 +439,7 @@ export default function Page() {
   }
 
   // Loading from Firestore
-  if (!dataLoaded) {
+  if (loggedIn && !dataLoaded) {
     return (
       <div style={{ minHeight: '100svh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <Image src="/copyai_logo.png" alt="CopyAI logo" width={56} height={56} priority style={{ borderRadius: 12, opacity: 0.8 }} />
