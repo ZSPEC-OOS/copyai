@@ -1,11 +1,26 @@
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@800&display=swap');
+
 :root {
-  --bg: #0b0514;
-  --panel: #111827;
-  --surface: #171a22;
-  --border: #232a34;
-  --text: #e5e7eb;
-  --accent: #7c3aed;
+  --bg: #08060f;
+  --panel: #0d0f1a;
+  --surface: #111420;
+  --border: #1c2035;
+  --border-hover: #2e3350;
+  --text: #eaedf5;
+  --text-muted: #6b7280;
+  --text-sub: #9ca3b0;
+  --accent: #8b5cf6;
+  --accent-hover: #9f6ff8;
+  --accent-dim: rgba(139, 92, 246, 0.12);
+  --accent-glow: rgba(139, 92, 246, 0.3);
+  --danger: #ef4444;
+  --danger-dim: rgba(239, 68, 68, 0.1);
+  --success: #10b981;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
 }
 
 * {
@@ -18,9 +33,262 @@ body {
   padding: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, Segoe UI, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* ─── Scrollbar ─────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-hover); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Form elements ─────────────────────────────────────────── */
 button {
   cursor: pointer;
+  font-family: inherit;
+  border: none;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+input, textarea {
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-dim) !important;
+}
+
+/* ─── Buttons ────────────────────────────────────────────────── */
+.btn-accent {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  padding: 9px 16px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 12px rgba(139, 92, 246, 0.35);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-accent:hover {
+  background: linear-gradient(135deg, #9f6ff8 0%, #8b5cf6 100%);
+  box-shadow: 0 4px 20px rgba(139, 92, 246, 0.5);
+  transform: translateY(-1px);
+}
+.btn-accent:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.35);
+}
+
+.btn-default {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-default:hover {
+  background: var(--border);
+  border-color: var(--border-hover);
+  color: #fff;
+}
+
+.btn-danger {
+  background: var(--danger-dim);
+  color: var(--danger);
+  font-weight: 500;
+  font-size: 14px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-danger:hover {
+  background: var(--danger);
+  color: #fff;
+  border-color: var(--danger);
+}
+
+.btn-sm {
+  padding: 5px 10px !important;
+  font-size: 13px !important;
+}
+
+/* ─── Prompt Cards ───────────────────────────────────────────── */
+.prompt-card {
+  position: relative;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+  cursor: pointer;
+  animation: fadeSlideIn 0.22s ease both;
+}
+.prompt-card:hover {
+  border-color: var(--border-hover) !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-hover);
+}
+.prompt-card:active {
+  transform: scale(0.998);
+}
+
+/* Copy badge that appears on hover */
+.copy-badge {
+  opacity: 0;
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 20px;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.45);
+}
+.prompt-card:hover .copy-badge {
+  opacity: 1;
+}
+
+/* ─── Library items ──────────────────────────────────────────── */
+.library-item {
+  transition: background 0.12s ease, border-color 0.12s ease;
+  border-radius: var(--radius-sm);
+}
+.library-item:hover {
+  background: rgba(139, 92, 246, 0.06);
+}
+.library-item:hover .library-title {
+  color: #fff;
+}
+
+/* ─── Logo ───────────────────────────────────────────────────── */
+.logo-text {
+  font-family: 'Space Grotesk', sans-serif;
+  background: linear-gradient(135deg, #b197fc 0%, #8b5cf6 60%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+/* ─── Badge ──────────────────────────────────────────────────── */
+.count-badge {
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 20px;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ─── Section label ──────────────────────────────────────────── */
+.section-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+/* ─── Empty state ────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 16px;
+  opacity: 0.6;
+  text-align: center;
+}
+.empty-state-icon {
+  font-size: 36px;
+  line-height: 1;
+}
+.empty-state-text {
+  font-size: 14px;
+  color: var(--text-sub);
+  line-height: 1.5;
+}
+
+/* ─── Animations ─────────────────────────────────────────────── */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal-backdrop {
+  animation: backdropIn 0.18s ease forwards;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ─── Modal panel ────────────────────────────────────────────── */
+.modal-panel {
+  animation: fadeSlideIn 0.22s ease forwards;
+}
+
+/* ─── Input / Textarea field ─────────────────────────────────── */
+.field {
+  width: 100%;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+/* ─── Divider ────────────────────────────────────────────────── */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0;
+}
+
+/* ─── Header bar ─────────────────────────────────────────────── */
+.header-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
