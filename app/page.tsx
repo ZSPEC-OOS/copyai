@@ -3,6 +3,8 @@
 
 import Image from 'next/image';
 import { useEffect, useState } from 'react';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 type Card = {
   id: string;
@@ -63,13 +65,8 @@ export default function Page() {
   }
 
   // ----------- State: cards on the page -----------
-  const [cards, setCards] = useState<Card[]>(() => {
-    try {
-      const raw = localStorage.getItem('copyai_cards');
-      if (raw) return JSON.parse(raw) as Card[];
-    } catch {}
-    return [];
-  });
+  const [cards, setCards] = useState<Card[]>([]);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   const [currentLayoutTitle, setCurrentLayoutTitle] = useState<string>('');
 
@@ -83,13 +80,7 @@ export default function Page() {
   const [editText, setEditText] = useState('');
 
   // ----------- State: Library -----------
-  const [layouts, setLayouts] = useState<LayoutEntry[]>(() => {
-    try {
-      const raw = localStorage.getItem('copyai_layouts');
-      if (raw) return JSON.parse(raw) as LayoutEntry[];
-    } catch {}
-    return [];
-  });
+  const [layouts, setLayouts] = useState<LayoutEntry[]>([]);
   const [showLibrary, setShowLibrary] = useState(false);
 
   // Expand/collapse per card
@@ -104,12 +95,30 @@ export default function Page() {
     });
   }
 
+  // Load from Firestore once after login
   useEffect(() => {
-    try { localStorage.setItem('copyai_cards', JSON.stringify(cards)); } catch {}
-  }, [cards]);
+    if (!loggedIn) return;
+    getDoc(doc(db, 'users', 'jesse')).then(snap => {
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.cards) setCards(data.cards as Card[]);
+        if (data.layouts) setLayouts(data.layouts as LayoutEntry[]);
+      }
+      setDataLoaded(true);
+    });
+  }, [loggedIn]);
+
+  // Save cards to Firestore whenever they change (after initial load)
   useEffect(() => {
-    try { localStorage.setItem('copyai_layouts', JSON.stringify(layouts)); } catch {}
-  }, [layouts]);
+    if (!dataLoaded) return;
+    setDoc(doc(db, 'users', 'jesse'), { cards }, { merge: true });
+  }, [cards, dataLoaded]);
+
+  // Save layouts to Firestore whenever they change (after initial load)
+  useEffect(() => {
+    if (!dataLoaded) return;
+    setDoc(doc(db, 'users', 'jesse'), { layouts }, { merge: true });
+  }, [layouts, dataLoaded]);
 
   // ----------- Utilities -----------
   function toast(msg: string, ms = 1600) {
@@ -423,6 +432,16 @@ export default function Page() {
             Log In
           </button>
         </form>
+      </div>
+    );
+  }
+
+  // Loading from Firestore
+  if (!dataLoaded) {
+    return (
+      <div style={{ minHeight: '100svh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
+        <Image src="/copyai_logo.png" alt="CopyAI logo" width={56} height={56} priority style={{ borderRadius: 12, opacity: 0.8 }} />
+        <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading your prompts…</span>
       </div>
     );
   }
