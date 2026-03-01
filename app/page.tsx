@@ -46,6 +46,22 @@ const LIB_BTN_STYLE: React.CSSProperties = {
 };
 
 export default function Page() {
+  // ----------- State: auth -----------
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (loginUser === 'Jesse' && loginPass === 'copyai') {
+      setLoggedIn(true);
+      setLoginError('');
+    } else {
+      setLoginError('Incorrect username or password.');
+    }
+  }
+
   // ----------- State: cards on the page -----------
   const [cards, setCards] = useState<Card[]>(() => {
     try {
@@ -331,6 +347,85 @@ export default function Page() {
     overflowWrap: 'anywhere',
     wordBreak: 'break-word',
   };
+
+  // ----------- Login screen -----------
+  if (!loggedIn) {
+    return (
+      <div style={{
+        minHeight: '100svh',
+        background: 'var(--bg)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px 16px',
+      }}>
+        <form
+          onSubmit={handleLogin}
+          style={{
+            background: 'var(--panel)',
+            border: '1px solid var(--border)',
+            borderRadius: 20,
+            padding: '40px 36px',
+            width: '100%',
+            maxWidth: 380,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 24,
+            boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+          }}
+        >
+          {/* Logo */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <Image
+              src="/copyai_logo.png"
+              alt="CopyAI logo"
+              width={80}
+              height={80}
+              priority
+              style={{ display: 'block', borderRadius: 16 }}
+            />
+            <span className="logo-text" style={{ fontSize: 30 }}>CopyAI</span>
+          </div>
+
+          {/* Fields */}
+          <div style={{ width: '100%', display: 'grid', gap: 12 }}>
+            <input
+              type="text"
+              value={loginUser}
+              onChange={e => { setLoginUser(e.target.value); setLoginError(''); }}
+              placeholder="Username"
+              autoComplete="username"
+              className="field"
+              style={{ fontSize: 15 }}
+            />
+            <input
+              type="password"
+              value={loginPass}
+              onChange={e => { setLoginPass(e.target.value); setLoginError(''); }}
+              placeholder="Password"
+              autoComplete="current-password"
+              className="field"
+              style={{ fontSize: 15 }}
+            />
+          </div>
+
+          {/* Error */}
+          {loginError && (
+            <div style={{ color: 'var(--danger)', fontSize: 13, fontWeight: 500, textAlign: 'center' }}>
+              {loginError}
+            </div>
+          )}
+
+          {/* Submit */}
+          <button type="submit" className="btn-accent" style={{ width: '100%', justifyContent: 'center', fontSize: 15, padding: '11px 20px' }}>
+            Log In
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   // ----------- Render -----------
   return (
