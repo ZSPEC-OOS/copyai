@@ -14,10 +14,11 @@ type Card = {
 type LayoutEntry = {
   id: string;
   title: string;
-  savedAt: number; // epoch ms
+  savedAt: number;
   cards: Card[];
 };
 
+// CSS variable references (kept for any remaining inline-only styles)
 const BG = 'var(--bg)';
 const PANEL = 'var(--panel)';
 const SURFACE = 'var(--surface)';
@@ -25,26 +26,23 @@ const BORDER = 'var(--border)';
 const TEXT = 'var(--text)';
 const ACCENT = 'var(--accent)';
 
-// Shared font size for modal header buttons
-const BUTTON_FONT_SIZE = 14;
-
-// Uniform style so label-based "buttons" match actual <button> elements
+// Shared style for library header label-buttons (file inputs must be <label>)
 const LIB_BTN_STYLE: React.CSSProperties = {
-  background: PANEL,
+  background: SURFACE,
   color: TEXT,
-  padding: '6px 10px',
+  padding: '6px 12px',
   borderRadius: 8,
   border: `1px solid ${BORDER}`,
-  fontSize: BUTTON_FONT_SIZE,
+  fontSize: 13,
+  fontWeight: 500,
   display: 'inline-flex',
   alignItems: 'center',
-  justifyContent: 'center',
+  gap: 6,
   lineHeight: 1.2,
   boxSizing: 'border-box',
-  maxWidth: '100%',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap'
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  transition: 'all 0.15s ease',
 };
 
 export default function Page() {
@@ -54,10 +52,9 @@ export default function Page() {
       const raw = localStorage.getItem('copyai_cards');
       if (raw) return JSON.parse(raw) as Card[];
     } catch {}
-    return []; // start empty; you add prompts
+    return [];
   });
 
-  // Layout title (kept for logic; not displayed)
   const [currentLayoutTitle, setCurrentLayoutTitle] = useState<string>('');
 
   // Add form
@@ -69,7 +66,7 @@ export default function Page() {
   const [editTitle, setEditTitle] = useState('');
   const [editText, setEditText] = useState('');
 
-  // ----------- State: Library (saved layouts) -----------
+  // ----------- State: Library -----------
   const [layouts, setLayouts] = useState<LayoutEntry[]>(() => {
     try {
       const raw = localStorage.getItem('copyai_layouts');
@@ -79,8 +76,7 @@ export default function Page() {
   });
   const [showLibrary, setShowLibrary] = useState(false);
 
-  // ----------- UI state: temporary expand/collapse per card -----------
-  // Not persisted; resets on reload.
+  // Expand/collapse per card
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   function toggleExpanded(id: string) {
@@ -92,7 +88,6 @@ export default function Page() {
     });
   }
 
-  // Persist page cards + layouts
   useEffect(() => {
     try { localStorage.setItem('copyai_cards', JSON.stringify(cards)); } catch {}
   }, [cards]);
@@ -101,24 +96,29 @@ export default function Page() {
   }, [layouts]);
 
   // ----------- Utilities -----------
-  function toast(msg: string, ms = 1200) {
+  function toast(msg: string, ms = 1600) {
     const el = document.createElement('div');
     el.textContent = msg;
     Object.assign(el.style, {
       position: 'fixed',
-      right: '12px',
-      bottom: '12px',
-      background: SURFACE,
-      color: TEXT,
-      border: `1px solid ${BORDER}`,
-      borderRadius: '8px',
-      padding: '10px 12px',
+      right: '16px',
+      bottom: '16px',
+      background: '#1c2035',
+      color: '#eaedf5',
+      border: '1px solid #2e3350',
+      borderRadius: '10px',
+      padding: '10px 16px',
       zIndex: '9999',
       boxSizing: 'border-box',
-      maxWidth: 'calc(100vw - 24px)',
-      overflow: 'hidden',
+      maxWidth: 'calc(100vw - 32px)',
+      fontSize: '14px',
+      fontWeight: '500',
+      fontFamily: "inherit",
+      boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
       whiteSpace: 'nowrap',
-      textOverflow: 'ellipsis'
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      animation: 'fadeSlideIn 0.2s ease both',
     } as CSSStyleDeclaration);
     document.body.appendChild(el);
     setTimeout(() => el.remove(), ms);
@@ -127,9 +127,9 @@ export default function Page() {
   async function copyNow(value: string) {
     try {
       await navigator.clipboard.writeText(value);
-      toast('✅ Copied');
+      toast('✓ Copied to clipboard');
     } catch {
-      alert('Clipboard failed');
+      alert('Clipboard access failed');
     }
   }
 
@@ -141,32 +141,25 @@ export default function Page() {
   }
 
   function fmt(ts: number) {
-    const d = new Date(ts);
-    return d.toLocaleString();
+    return new Date(ts).toLocaleString();
   }
 
-  // Heuristic: decide if a text likely exceeds 3 lines and warrants a "Show more"
   function needsClamp(txt: string): boolean {
     if (!txt) return false;
     const lineCount = txt.split(/\r?\n/).length;
-    return lineCount > 3 || txt.length > 240; // simple, layout-free heuristic
+    return lineCount > 3 || txt.length > 240;
   }
 
-  // ----------- Page actions: Add / Edit / Delete cards -----------
+  // ----------- Card actions -----------
   function addCard() {
     const t = title.trim();
     const x = text.trim();
-    if (!t && !x) {
-      toast('Enter a title or text first');
-      return;
-    }
+    if (!t && !x) { toast('Enter a title or text first'); return; }
     const id = 'c' + Date.now();
-    const newCard: Card = { id, title: t || 'Untitled', text: x, createdAt: Date.now() };
-    // Append to bottom
-    setCards(prev => [...prev, newCard]);
+    setCards(prev => [...prev, { id, title: t || 'Untitled', text: x, createdAt: Date.now() }]);
     setTitle('');
     setText('');
-    toast('➕ Added (to bottom)');
+    toast('✓ Prompt added');
   }
 
   function startEdit(id: string) {
@@ -184,7 +177,7 @@ export default function Page() {
     setEditingId(null);
     setEditTitle('');
     setEditText('');
-    toast('💾 Saved');
+    toast('✓ Saved');
   }
 
   function cancelEdit() {
@@ -196,26 +189,18 @@ export default function Page() {
   function removeCard(id: string) {
     if (!confirm('Delete this prompt?')) return;
     setCards(prev => prev.filter(c => c.id !== id));
-    toast('🗑 Deleted');
+    toast('Prompt deleted');
   }
 
-  // ----------- Layout actions: Save / Open / Delete -----------
+  // ----------- Layout actions -----------
   function saveLayout() {
-    if (cards.length === 0) {
-      toast('Nothing to save (no prompts yet)');
-      return;
-    }
-    const base = prompt('Layout title:', currentLayoutTitle || '') ?? '';
+    if (cards.length === 0) { toast('No prompts to save'); return; }
+    const base = prompt('Layout name:', currentLayoutTitle || '') ?? '';
     const uniqueTitle = nextUniqueTitle(base);
-    const entry: LayoutEntry = {
-      id: 'L' + Date.now(),
-      title: uniqueTitle,
-      savedAt: Date.now(),
-      cards
-    };
+    const entry: LayoutEntry = { id: 'L' + Date.now(), title: uniqueTitle, savedAt: Date.now(), cards };
     setLayouts(prev => [...prev, entry]);
     setCurrentLayoutTitle(uniqueTitle);
-    toast(`💾 Saved layout: ${uniqueTitle}`);
+    toast(`✓ Saved: ${uniqueTitle}`);
   }
 
   function openLayout(id: string) {
@@ -224,8 +209,8 @@ export default function Page() {
     setCards(lay.cards);
     setCurrentLayoutTitle(lay.title);
     setShowLibrary(false);
-    setExpanded(new Set()); // reset temp expansion on open
-    toast(`📂 Opened: ${lay.title}`);
+    setExpanded(new Set());
+    toast(`Opened: ${lay.title}`);
   }
 
   function deleteLayout(id: string) {
@@ -233,10 +218,10 @@ export default function Page() {
     if (!lay) return;
     if (!confirm(`Delete layout?\n\n${lay.title}`)) return;
     setLayouts(prev => prev.filter(l => l.id !== id));
-    toast('🗑 Layout deleted');
+    toast('Layout deleted');
   }
 
-  // ----------- Import/Export (inside Library) -----------
+  // ----------- Import / Export -----------
   function exportJSON() {
     const blob = new Blob([JSON.stringify({ cards }, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -247,123 +232,81 @@ export default function Page() {
     URL.revokeObjectURL(url);
   }
 
- function exportLibrary() {
-  const payload = JSON.stringify({ layouts }, null, 2);
-
-  // Primary: modern clipboard API
-  navigator.clipboard.writeText(payload)
-    .then(() => {
-      toast('✅ Library copied to clipboard');
-    })
-    .catch(() => {
-      // Fallback: create a hidden textarea and copy via execCommand
-      try {
-        const ta = document.createElement('textarea');
-        ta.value = payload;
-        ta.style.position = 'fixed';
-        ta.style.left = '-9999px';
-        ta.setAttribute('readonly', 'true');
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        toast('✅ Library copied to clipboard');
-      } catch {
-        // Last resort: show an alert so user can copy manually
-        alert('Copy failed. Your browser may block clipboard access.\n\nHere is the library JSON so you can copy it manually:\n\n' + payload);
-      }
-    });
-}
-
+  function exportLibrary() {
+    const payload = JSON.stringify({ layouts }, null, 2);
+    navigator.clipboard.writeText(payload)
+      .then(() => toast('✓ Library copied to clipboard'))
+      .catch(() => {
+        try {
+          const ta = document.createElement('textarea');
+          ta.value = payload;
+          ta.style.position = 'fixed';
+          ta.style.left = '-9999px';
+          ta.setAttribute('readonly', 'true');
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          toast('✓ Library copied to clipboard');
+        } catch {
+          alert('Copy failed.\n\n' + payload);
+        }
+      });
+  }
 
   function importJSON(file: File) {
     file.text().then(t => {
       const data = JSON.parse(t);
-      if (!data || !Array.isArray(data.cards)) {
-        alert('Invalid file');
-        return;
-      }
+      if (!data || !Array.isArray(data.cards)) { alert('Invalid file'); return; }
       const norm: Card[] = data.cards.map((c: any, i: number) => ({
         id: String(c.id ?? 'c' + Date.now() + i),
         title: String(c.title ?? 'Untitled'),
         text: String(c.text ?? ''),
         createdAt: Number.isFinite(+c.createdAt) ? +c.createdAt : Date.now() - i
       }));
-      // Oldest at top, newest at bottom
       norm.sort((a, b) => a.createdAt - b.createdAt);
       setCards(norm);
-      setExpanded(new Set()); // reset temp expansion on import
-      toast('📥 Imported');
+      setExpanded(new Set());
+      toast('✓ Layout imported');
     }).catch(() => alert('Failed to read file'));
   }
 
-  // New: Import Library (layouts) from file
   function importLibrary(file: File) {
     file.text().then(t => {
       let data: any;
-      try {
-        data = JSON.parse(t);
-      } catch {
-        alert('Invalid JSON');
-        return;
-      }
-
-      // Accept common shapes:
-      // - { layouts: [...] }
-      // - [ ... ] (array of layouts)
+      try { data = JSON.parse(t); } catch { alert('Invalid JSON'); return; }
       const incoming = Array.isArray(data) ? data : data?.layouts;
-      if (!Array.isArray(incoming)) {
-        alert('Invalid library file (expected { "layouts": [...] })');
-        return;
-      }
-
-      // Build a set of existing titles to avoid collisions
+      if (!Array.isArray(incoming)) { alert('Invalid library file'); return; }
       const existingTitles = new Set(layouts.map(l => l.title));
-
       const normalized: LayoutEntry[] = incoming.map((l: any, li: number) => {
-        // normalize cards
         const cardsArr: Card[] = Array.isArray(l?.cards) ? l.cards.map((c: any, i: number) => ({
           id: String(c?.id ?? 'c' + Date.now() + '_' + li + '_' + i),
           title: String(c?.title ?? 'Untitled'),
           text: String(c?.text ?? ''),
           createdAt: Number.isFinite(+c?.createdAt) ? +c.createdAt : (Date.now() - i)
         })) : [];
-
-        // Sort oldest->newest
         cardsArr.sort((a, b) => a.createdAt - b.createdAt);
-
-        // Title uniqueness across existing + within this import
-        let baseTitle = String(l?.title ?? 'Untitled');
-        let uniqueTitle = baseTitle.trim() || 'Untitled';
+        let uniqueTitle = (String(l?.title ?? 'Untitled')).trim() || 'Untitled';
         while (existingTitles.has(uniqueTitle)) uniqueTitle = uniqueTitle + '-2';
         existingTitles.add(uniqueTitle);
-
-        const savedAt = Number.isFinite(+l?.savedAt) ? +l.savedAt : Date.now() - li;
-
         return {
           id: 'L' + Date.now() + '_' + li,
           title: uniqueTitle,
-          savedAt,
+          savedAt: Number.isFinite(+l?.savedAt) ? +l.savedAt : Date.now() - li,
           cards: cardsArr
         };
       });
-
-      if (normalized.length === 0) {
-        toast('ℹ️ No layouts found in file');
-        return;
-      }
-
+      if (normalized.length === 0) { toast('No layouts found in file'); return; }
       setLayouts(prev => [...prev, ...normalized]);
-      toast(`📚 Imported ${normalized.length} layout${normalized.length > 1 ? 's' : ''}`);
+      toast(`✓ Imported ${normalized.length} layout${normalized.length > 1 ? 's' : ''}`);
     }).catch(() => alert('Failed to read file'));
   }
 
-  // ----------- Styles for preview clamping (3 lines) -----------
-  const LINE_HEIGHT = 1.4; // visual line-height multiplier
+  // ----------- Preview styles -----------
+  const LINE_HEIGHT = 1.5;
   const PREVIEW_LINES = 3;
   const PREVIEW_HEIGHT = `calc(${LINE_HEIGHT}em * ${PREVIEW_LINES})`;
 
-  // Collapsed preview: fixed height (equal for all), 3 lines visible, rest hidden
   const previewCollapsedStyle: React.CSSProperties = {
     whiteSpace: 'pre-line',
     display: '-webkit-box',
@@ -372,14 +315,12 @@ export default function Page() {
     overflow: 'hidden',
     lineHeight: LINE_HEIGHT as unknown as string,
     height: PREVIEW_HEIGHT,
-    opacity: 1,
     boxSizing: 'border-box',
     maxWidth: '100%',
     overflowWrap: 'anywhere',
-    wordBreak: 'break-word'
+    wordBreak: 'break-word',
   };
 
-  // Expanded view: full text
   const previewExpandedStyle: React.CSSProperties = {
     whiteSpace: 'pre-wrap',
     display: 'block',
@@ -388,458 +329,383 @@ export default function Page() {
     boxSizing: 'border-box',
     maxWidth: '100%',
     overflowWrap: 'anywhere',
-    wordBreak: 'break-word'
+    wordBreak: 'break-word',
   };
 
   // ----------- Render -----------
   return (
-    <div
-      style={{
-        minHeight: '100svh',
-        padding: 12,
-        overflowX: 'hidden', // vertical scroll only
-        boxSizing: 'border-box',
-        maxWidth: '100%',
-      }}
-    >
-      {/* Header / Controls */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 16,
-          padding: '8px 4px',
-          boxSizing: 'border-box',
-          maxWidth: '100%',
-          overflow: 'hidden'
-        }}
-      >
-        {/* Logo + App Name (CopyAI visible) */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={{ minHeight: '100svh', background: BG }}>
+
+      {/* ── Sticky Header ─────────────────────────────────────── */}
+      <header className="header-bar">
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
           <Image
             src="/copyai_logo.png"
             alt="CopyAI logo"
-            width={22}
-            height={22}
+            width={26}
+            height={26}
             priority
-            style={{ display: 'block' }}
+            style={{ display: 'block', borderRadius: 6 }}
           />
-          <div style={{ fontWeight: 700, fontSize: 20 }}>
-            CopyAI
-          </div>
+          <span className="logo-text">CopyAI</span>
         </div>
 
-        {/* Spacer pushes the buttons to the right */}
-        <div style={{ marginLeft: 'auto' }} />
-
-        {/* Primary actions aligned to the right */}
-        <button
-          onClick={saveLayout}
-          style={{ background: ACCENT, color: '#fff', padding: '8px 12px', borderRadius: 8 }}
-          title="Save current list as a layout in the Library"
-        >
-          💾 Save Layout
-        </button>
-
-        <button
-          onClick={() => setShowLibrary(true)}
-          style={{ background: PANEL, color: TEXT, padding: '8px 12px', borderRadius: 8 }}
-          title="Open Library"
-        >
-          📚 Library
-        </button>
-      </div>
-
-      {/* Add Form */}
-      <div
-        style={{
-          background: PANEL,
-          border: `1px solid ${BORDER}`,
-          borderRadius: 12,
-          padding: 16,
-          display: 'grid',
-          gap: 10,
-          marginBottom: 16,
-          boxSizing: 'border-box',
-          maxWidth: '100%',
-          overflow: 'hidden' // ensures rounded corners are always respected
-        }}
-      >
-        {/* No section title */}
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Title (e.g., Outreach – Follow-up #1)"
-          style={{
-            width: '100%',
-            background: SURFACE,
-            color: TEXT,
-            border: `1px solid ${BORDER}`,
-            borderRadius: 8,
-            padding: '10px',
-            boxSizing: 'border-box',
-            maxWidth: '100%',
-            overflowWrap: 'anywhere',
-            wordBreak: 'break-word'
-          }}
-        />
-
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Prompt text…"
-          rows={5}
-          style={{
-            width: '100%',
-            resize: 'vertical',
-            background: SURFACE,
-            color: TEXT,
-            border: `1px solid ${BORDER}`,
-            borderRadius: 8,
-            padding: 10,
-            boxSizing: 'border-box',
-            maxWidth: '100%',
-            overflowWrap: 'anywhere',
-            wordBreak: 'break-word'
-          }}
-        />
-
-        <div>
-          <button
-            onClick={addCard}
-            style={{ background: ACCENT, color: '#fff', padding: '10px 14px', borderRadius: 8 }}
-          >
-            ➕ Add (goes to bottom)
-          </button>
-        </div>
-      </div>
-
-      {/* Vertical List (oldest first, newest last) */}
-      <div style={{ display: 'grid', gap: 12, overflowX: 'hidden', boxSizing: 'border-box', maxWidth: '100%' }}>
-        {cards.length === 0 && (
-          <div style={{ opacity: .7, textAlign: 'center' }}>(No prompts yet — add one above)</div>
+        {/* Prompt count badge */}
+        {cards.length > 0 && (
+          <span className="count-badge">
+            {cards.length} prompt{cards.length !== 1 ? 's' : ''}
+          </span>
         )}
 
-        {cards.map((c) => {
-          const isEditing = editingId === c.id;
-          const isExpanded = expanded.has(c.id);
-          const showToggle = needsClamp(c.text) || isExpanded;
+        {/* Spacer */}
+        <div style={{ flex: 1 }} />
 
-          return (
-            <div
-              key={c.id}
-              onClick={(e) => {
-                if (isEditing) return;
-                if ((e.target as HTMLElement).closest('[data-nocopy]')) return;
-                // Copy full text on card click (primary behavior)
-                copyNow(c.text);
-              }}
-              style={{
-                background: SURFACE,
-                border: `1px solid ${BORDER}`,
-                borderRadius: 12,
-                padding: 12,
-                boxSizing: 'border-box',
-                maxWidth: '100%',
-                // Critical: Clip children so rounded corners are always respected
-                overflow: 'hidden'
-              }}
-            >
-              {isEditing ? (
-                <div style={{ display: 'grid', gap: 8, boxSizing: 'border-box', maxWidth: '100%' }}>
-                  <input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    placeholder="Title"
-                    style={{
-                      width: '100%',
-                      background: BG,
-                      color: TEXT,
-                      border: `1px solid ${BORDER}`,
-                      borderRadius: 8,
-                      padding: '8px 10px',
-                      boxSizing: 'border-box',
-                      maxWidth: '100%',
-                      overflowWrap: 'anywhere',
-                      wordBreak: 'break-word'
-                    }}
-                  />
-                  <textarea
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    placeholder="Text"
-                    rows={5}
-                    style={{
-                      width: '100%',
-                      resize: 'vertical',
-                      background: BG,
-                      color: TEXT,
-                      border: `1px solid ${BORDER}`,
-                      borderRadius: 8,
-                      padding: 10,
-                      boxSizing: 'border-box',
-                      maxWidth: '100%',
-                      overflowWrap: 'anywhere',
-                      wordBreak: 'break-word'
-                    }}
-                  />
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={saveEdit} style={{ background: ACCENT, color: '#fff', padding: '8px 12px', borderRadius: 8 }} data-nocopy>
-                      Save
-                    </button>
-                    <button onClick={cancelEdit} style={{ background: PANEL, color: TEXT, padding: '8px 12px', borderRadius: 8 }} data-nocopy>
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'grid', gap: 6, boxSizing: 'border-box', maxWidth: '100%' }}>
+        {/* Actions */}
+        <button className="btn-default btn-sm" onClick={() => setShowLibrary(true)} title="Open Library">
+          📚 Library
+          {layouts.length > 0 && (
+            <span style={{
+              background: ACCENT,
+              color: '#fff',
+              fontSize: 10,
+              fontWeight: 700,
+              padding: '1px 6px',
+              borderRadius: 10,
+              marginLeft: 2,
+            }}>
+              {layouts.length}
+            </span>
+          )}
+        </button>
+
+        <button className="btn-accent btn-sm" onClick={saveLayout} title="Save current prompts as a layout">
+          💾 Save Layout
+        </button>
+      </header>
+
+      {/* ── Page body ─────────────────────────────────────────── */}
+      <main style={{
+        maxWidth: 720,
+        margin: '0 auto',
+        padding: '24px 16px 48px',
+        boxSizing: 'border-box',
+      }}>
+
+        {/* ── Add Prompt Form ──────────────────────────────────── */}
+        <section style={{
+          background: PANEL,
+          border: `1px solid ${BORDER}`,
+          borderRadius: 14,
+          padding: '20px',
+          marginBottom: 24,
+          boxSizing: 'border-box',
+        }}>
+          <p className="section-label">New Prompt</p>
+
+          <div style={{ display: 'grid', gap: 10 }}>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addCard()}
+              placeholder="Title — e.g. Outreach Follow-up #1"
+              className="field"
+              style={{ fontSize: 14 }}
+            />
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Prompt text…"
+              rows={4}
+              className="field"
+            />
+            <div>
+              <button onClick={addCard} className="btn-accent">
+                + Add Prompt
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Prompt Cards ─────────────────────────────────────── */}
+        {cards.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-state-icon">✦</div>
+            <div className="empty-state-text">
+              No prompts yet.<br />Add one above to get started.
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="section-label" style={{ marginBottom: 12 }}>Your Prompts</p>
+            <div style={{ display: 'grid', gap: 10 }}>
+              {cards.map((c) => {
+                const isEditing = editingId === c.id;
+                const isExpanded = expanded.has(c.id);
+                const showToggle = needsClamp(c.text) || isExpanded;
+
+                return (
                   <div
+                    key={c.id}
+                    className={isEditing ? undefined : 'prompt-card'}
+                    onClick={(e) => {
+                      if (isEditing) return;
+                      if ((e.target as HTMLElement).closest('[data-nocopy]')) return;
+                      copyNow(c.text);
+                    }}
                     style={{
-                      fontWeight: 700,
-                      fontSize: 16,
+                      background: SURFACE,
+                      border: `1px solid ${BORDER}`,
+                      borderRadius: 12,
+                      padding: 16,
                       boxSizing: 'border-box',
-                      maxWidth: '100%',
                       overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap'
-                    }}
-                    title={c.title || 'Untitled'}
-                  >
-                    {c.title || 'Untitled'}
-                  </div>
-
-                  {/* Text + bottom-right toggle container */}
-                  <div
-                    style={{
                       position: 'relative',
-                      boxSizing: 'border-box',
-                      maxWidth: '100%',
-                      // Ensure toggle never sits outside rounded clipping
-                      paddingBottom: showToggle ? 28 : 0
                     }}
                   >
-                    <div
-                      style={{
-                        ...(isExpanded ? previewExpandedStyle : previewCollapsedStyle),
-                        opacity: c.text ? 1 : .6
-                      }}
-                    >
-                      {c.text || '(empty)'}
-                    </div>
+                    {/* Copy badge (shown on hover via CSS) */}
+                    {!isEditing && <span className="copy-badge">Copy</span>}
 
-                    {showToggle && (
-                      <button
-                        data-nocopy
-                        onClick={(e) => {
-                          e.stopPropagation(); // do not copy text when toggling
-                          toggleExpanded(c.id);
-                        }}
-                        aria-label={isExpanded ? 'Show less' : 'Show more'}
-                        title={isExpanded ? 'Show less' : 'Show more'}
-                        style={{
-                          position: 'absolute',
-                          right: 8, // inset to keep away from the clipped edge
-                          bottom: 8, // inset to keep away from the clipped edge
-                          background: PANEL,
-                          color: TEXT,
-                          border: `1px solid ${BORDER}`,
-                          borderRadius: 6,
-                          padding: '2px 8px',
-                          fontSize: 12,
-                          lineHeight: 1.4,
-                          cursor: 'pointer',
-                          maxWidth: 'calc(100% - 16px)',
-                          boxSizing: 'border-box',
+                    {isEditing ? (
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        <input
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          placeholder="Title"
+                          className="field"
+                        />
+                        <textarea
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          placeholder="Prompt text"
+                          rows={5}
+                          className="field"
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={saveEdit} className="btn-accent btn-sm" data-nocopy>Save</button>
+                          <button onClick={cancelEdit} className="btn-default btn-sm" data-nocopy>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'grid', gap: 8 }}>
+                        {/* Title */}
+                        <div style={{
+                          fontWeight: 700,
+                          fontSize: 15,
+                          letterSpacing: '-0.01em',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap'
-                        }}
-                      >
-                        {isExpanded ? 'Show less' : 'Show more'}
-                      </button>
+                          whiteSpace: 'nowrap',
+                          paddingRight: 60, // make room for copy badge
+                        }} title={c.title || 'Untitled'}>
+                          {c.title || 'Untitled'}
+                        </div>
+
+                        {/* Text + expand toggle */}
+                        <div style={{
+                          position: 'relative',
+                          paddingBottom: showToggle ? 30 : 0,
+                        }}>
+                          <div style={{
+                            ...(isExpanded ? previewExpandedStyle : previewCollapsedStyle),
+                            fontSize: 13,
+                            color: c.text ? 'var(--text-sub)' : 'var(--text-muted)',
+                          }}>
+                            {c.text || '(empty)'}
+                          </div>
+
+                          {showToggle && (
+                            <button
+                              data-nocopy
+                              onClick={(e) => { e.stopPropagation(); toggleExpanded(c.id); }}
+                              aria-label={isExpanded ? 'Show less' : 'Show more'}
+                              style={{
+                                position: 'absolute',
+                                right: 0,
+                                bottom: 0,
+                                background: SURFACE,
+                                color: 'var(--text-muted)',
+                                border: `1px solid ${BORDER}`,
+                                borderRadius: 6,
+                                padding: '2px 10px',
+                                fontSize: 11,
+                                fontWeight: 600,
+                                letterSpacing: '0.03em',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {isExpanded ? '↑ Less' : '↓ More'}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Action buttons */}
+                        <div style={{ display: 'flex', gap: 8, marginTop: 2, flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => startEdit(c.id)}
+                            className="btn-default btn-sm"
+                            data-nocopy
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => removeCard(c.id)}
+                            className="btn-danger btn-sm"
+                            data-nocopy
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
                     )}
                   </div>
-
-                  {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
-                    <button onClick={() => startEdit(c.id)} style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8 }} data-nocopy>
-                      Edit
-                    </button>
-                    <button onClick={() => removeCard(c.id)} style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8 }} data-nocopy>
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )}
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+          </>
+        )}
+      </main>
 
-      {/* Library Modal (with Import/Export inside) */}
+      {/* ── Library Modal ─────────────────────────────────────── */}
       {showLibrary && (
         <div
+          className="modal-backdrop"
           onClick={() => setShowLibrary(false)}
           style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)',
-            display: 'grid', placeItems: 'center', zIndex: 10000,
-            boxSizing: 'border-box',
-            maxWidth: '100%',
-            overflow: 'hidden'
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.65)',
+            display: 'grid',
+            placeItems: 'center',
+            zIndex: 10000,
+            padding: 16,
           }}
         >
           <div
+            className="modal-panel"
             onClick={(e) => e.stopPropagation()}
             style={{
               background: PANEL,
               border: `1px solid ${BORDER}`,
-              borderRadius: 12,
-              width: 'min(720px, 92vw)',
-              maxHeight: '80vh',
-              // Scroll stays inside rounded container:
+              borderRadius: 16,
+              width: 'min(680px, 100%)',
+              maxHeight: '82vh',
               overflow: 'auto',
-              padding: '16px 14px 16px',
               boxSizing: 'border-box',
-              maxWidth: '92vw',
-              // Clip to preserve rounded corners at all times
-              overflowClipMargin: '0px', // harmless if unsupported
-              overflowX: 'hidden'
+              boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                justifyContent: 'space-between',
-                marginBottom: 10,
-                flexWrap: 'wrap',
-                rowGap: 8,
-                boxSizing: 'border-box',
-                maxWidth: '100%'
-              }}
-            >
-              {/* Left cluster: Import / Export Current Layout / Import Library / Export Library */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', boxSizing: 'border-box', maxWidth: '100%' }}>
-                {/* Import current layout (cards) */}
-                <label
-                  style={LIB_BTN_STYLE}
-                  title="Import a layout (JSON file with cards)"
-                >
-                  Import Layout From File
-                  <input
-                    type="file"
-                    accept="application/json"
-                    hidden
-                    onChange={(e) => e.target.files && importJSON(e.target.files[0])}
-                  />
-                </label>
-
-                {/* Export current layout (cards) */}
-                <button
-                  onClick={exportJSON}
-                  style={LIB_BTN_STYLE}
-                  title="Export current layout as JSON"
-                >
-                  Export Current Layout
-                </button>
-
-                {/* NEW: Import Library (layouts) — placed to the LEFT of Export Library */}
-                <label
-                  style={LIB_BTN_STYLE}
-                  title="Import a saved library (JSON with layouts)"
-                >
-                  Import Library From File
-                  <input
-                    type="file"
-                    accept="application/json"
-                    hidden
-                    onChange={(e) => e.target.files && importLibrary(e.target.files[0])}
-                  />
-                </label>
-
-                {/* Export Library (layouts) */}
-                <button
-                  onClick={exportLibrary}
-                  style={LIB_BTN_STYLE}
-                  title="Export all saved layouts as JSON"
-                >
-                  Export Library
-                </button>
+            {/* Modal header */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '16px 20px',
+              borderBottom: `1px solid ${BORDER}`,
+              gap: 8,
+              flexWrap: 'wrap',
+              rowGap: 10,
+              position: 'sticky',
+              top: 0,
+              background: PANEL,
+              zIndex: 1,
+            }}>
+              <div style={{ fontWeight: 700, fontSize: 16, letterSpacing: '-0.01em' }}>
+                Library
+                {layouts.length > 0 && (
+                  <span className="count-badge" style={{ marginLeft: 10 }}>
+                    {layouts.length}
+                  </span>
+                )}
               </div>
-
-              {/* Right: Close (purple) */}
-              <button
-                onClick={() => setShowLibrary(false)}
-                style={{
-                  background: ACCENT,
-                  color: '#fff',
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  fontSize: BUTTON_FONT_SIZE
-                }}
-              >
-                Close
+              <button onClick={() => setShowLibrary(false)} className="btn-accent btn-sm">
+                ✕ Close
               </button>
             </div>
 
-            {layouts.length === 0 && <div style={{ opacity: .7 }}>(Library is empty)</div>}
+            {/* Import / Export toolbar */}
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 8,
+              padding: '14px 20px',
+              borderBottom: `1px solid ${BORDER}`,
+            }}>
+              <label style={LIB_BTN_STYLE} title="Import a layout JSON file">
+                ↑ Import Layout
+                <input type="file" accept="application/json" hidden
+                  onChange={(e) => e.target.files && importJSON(e.target.files[0])} />
+              </label>
 
-            <div style={{ display: 'grid', gap: 8 }}>
-   
-{layouts.map(l => (
-  <div
-    key={l.id}
-    style={{
-      display: 'flex',
-      alignItems: 'center',
-      padding: '10px 12px',               // inset so buttons don't touch the rounded edge
-      borderBottom: `1px solid ${BORDER}`,
-      borderRadius: 8,                    // optional: softens row corners visually
-      boxSizing: 'border-box',
-      width: '100%',
-      gap: 8,
-      overflow: 'hidden'                  // prevents accidental horizontal overflow within row
-    }}
-  >
-    {/* Left block: title + timestamp (flexible, shrinks as needed) */}
-    <div style={{ flex: '1 1 auto', minWidth: 0 }}>
-      <div
-        style={{
-          fontWeight: 600,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap'
-        }}
-        title={l.title}
-      >
-        {l.title}
-      </div>
-      <div style={{ opacity: .6, fontSize: 12 }}>Saved: {fmt(l.savedAt)}</div>
-    </div>
+              <button onClick={exportJSON} style={LIB_BTN_STYLE} title="Export current layout as JSON">
+                ↓ Export Layout
+              </button>
 
-    {/* Right block: buttons (fixed width) */}
-    <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
-      <button
-        onClick={() => openLayout(l.id)}
-        style={{ background: ACCENT, color: '#fff', padding: '6px 10px', borderRadius: 8 }}
-      >
-        Open
-      </button>
-      <button
-        onClick={() => deleteLayout(l.id)}
-        style={{ background: PANEL, color: TEXT, padding: '6px 10px', borderRadius: 8, border: `1px solid ${BORDER}` }}
-      >
-        Delete
-      </button>
-    </div>
-  </div>
-))}
+              <label style={LIB_BTN_STYLE} title="Import a library JSON file">
+                ↑ Import Library
+                <input type="file" accept="application/json" hidden
+                  onChange={(e) => e.target.files && importLibrary(e.target.files[0])} />
+              </label>
 
+              <button onClick={exportLibrary} style={LIB_BTN_STYLE} title="Copy all layouts as JSON">
+                ↓ Export Library
+              </button>
             </div>
 
+            {/* Layout list */}
+            <div style={{ padding: '12px 20px 20px' }}>
+              {layouts.length === 0 ? (
+                <div className="empty-state" style={{ padding: '32px 16px' }}>
+                  <div className="empty-state-icon">📚</div>
+                  <div className="empty-state-text">No saved layouts yet.<br />Save your current prompts to get started.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gap: 6 }}>
+                  {layouts.map(l => (
+                    <div
+                      key={l.id}
+                      className="library-item"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '12px 14px',
+                        borderBottom: `1px solid ${BORDER}`,
+                        gap: 12,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                        <div
+                          className="library-title"
+                          style={{
+                            fontWeight: 600,
+                            fontSize: 14,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            transition: 'color 0.12s ease',
+                          }}
+                          title={l.title}
+                        >
+                          {l.title}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                          {l.cards.length} prompt{l.cards.length !== 1 ? 's' : ''} · {fmt(l.savedAt)}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', gap: 8, flex: '0 0 auto' }}>
+                        <button onClick={() => openLayout(l.id)} className="btn-accent btn-sm">
+                          Open
+                        </button>
+                        <button onClick={() => deleteLayout(l.id)} className="btn-danger btn-sm">
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
