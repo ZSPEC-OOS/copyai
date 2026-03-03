@@ -475,7 +475,7 @@ export default function Page() {
             width={95}
             height={25}
             priority
-            style={{ display: 'block', position: 'relative', top: 3 }}
+            style={{ display: 'block', marginTop: 4 }}
           />
         </div>
 
