@@ -398,8 +398,8 @@ export default function Page() {
             <Image
               src="/copyainewlogo.PNG"
               alt="CopyAI"
-              width={242}
-              height={65}
+              width={180}
+              height={48}
               priority
               style={{ display: 'block' }}
             />
@@ -472,10 +472,10 @@ export default function Page() {
           <Image
             src="/copyainewlogo.PNG"
             alt="CopyAI"
-            width={121}
-            height={32}
+            width={95}
+            height={25}
             priority
-            style={{ display: 'block' }}
+            style={{ display: 'block', position: 'relative', top: 3 }}
           />
         </div>
 
