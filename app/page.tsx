@@ -390,8 +390,8 @@ export default function Page() {
             <Image
               src="/copyainewlogo.PNG"
               alt="CopyAI logo"
-              width={200}
-              height={80}
+              width={242}
+              height={65}
               priority
               style={{ display: 'block' }}
             />
@@ -439,7 +439,7 @@ export default function Page() {
   if (!dataLoaded) {
     return (
       <div style={{ minHeight: '100svh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-        <Image src="/copyainewlogo.PNG" alt="CopyAI logo" width={140} height={56} priority style={{ opacity: 0.8 }} />
+        <Image src="/copyai_logo.png" alt="CopyAI logo" width={56} height={56} priority style={{ borderRadius: 12, opacity: 0.8 }} />
         <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading your prompts…</span>
       </div>
     );
@@ -456,8 +456,8 @@ export default function Page() {
           <Image
             src="/copyainewlogo.PNG"
             alt="CopyAI logo"
-            width={90}
-            height={36}
+            width={121}
+            height={32}
             priority
             style={{ display: 'block' }}
           />
