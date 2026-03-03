@@ -388,14 +388,13 @@ export default function Page() {
           {/* Logo */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <Image
-              src="/copyai_logo.png"
+              src="/copyainewlogo.PNG"
               alt="CopyAI logo"
-              width={80}
+              width={200}
               height={80}
               priority
-              style={{ display: 'block', borderRadius: 16 }}
+              style={{ display: 'block' }}
             />
-            <span className="logo-text" style={{ fontSize: 30 }}>CopyAI</span>
           </div>
 
           {/* Fields */}
@@ -440,7 +439,7 @@ export default function Page() {
   if (!dataLoaded) {
     return (
       <div style={{ minHeight: '100svh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
-        <Image src="/copyai_logo.png" alt="CopyAI logo" width={56} height={56} priority style={{ borderRadius: 12, opacity: 0.8 }} />
+        <Image src="/copyainewlogo.PNG" alt="CopyAI logo" width={140} height={56} priority style={{ opacity: 0.8 }} />
         <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading your prompts…</span>
       </div>
     );
@@ -453,16 +452,15 @@ export default function Page() {
       {/* ── Sticky Header ─────────────────────────────────────── */}
       <header className="header-bar">
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', flex: '0 0 auto' }}>
           <Image
-            src="/copyai_logo.png"
+            src="/copyainewlogo.PNG"
             alt="CopyAI logo"
-            width={26}
-            height={26}
+            width={90}
+            height={36}
             priority
-            style={{ display: 'block', borderRadius: 6 }}
+            style={{ display: 'block' }}
           />
-          <span className="logo-text">CopyAI</span>
         </div>
 
         {/* Prompt count badge */}
