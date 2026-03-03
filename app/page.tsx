@@ -388,8 +388,16 @@ export default function Page() {
           {/* Logo */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <Image
-              src="/copyainewlogo.PNG"
+              src="/copyai_logo.png"
               alt="CopyAI logo"
+              width={80}
+              height={80}
+              priority
+              style={{ display: 'block', borderRadius: 16 }}
+            />
+            <Image
+              src="/copyainewlogo.PNG"
+              alt="CopyAI"
               width={242}
               height={65}
               priority
@@ -452,10 +460,18 @@ export default function Page() {
       {/* ── Sticky Header ─────────────────────────────────────── */}
       <header className="header-bar">
         {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', flex: '0 0 auto' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
+          <Image
+            src="/copyai_logo.png"
+            alt="CopyAI logo"
+            width={26}
+            height={26}
+            priority
+            style={{ display: 'block', borderRadius: 6 }}
+          />
           <Image
             src="/copyainewlogo.PNG"
-            alt="CopyAI logo"
+            alt="CopyAI"
             width={121}
             height={32}
             priority
