@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CopyAI</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ── Header ──────────────────────────────────────────── -->
+    <header class="header">
+      <div class="logo">
+        <div class="logo-icon">✦</div>
+        CopyAI
+      </div>
+      <span id="prompt-count" class="count-badge" style="display:none"></span>
+      <div class="header-actions">
+        <button class="btn-default btn-sm" id="library-btn" title="Open layout library">
+          📚 <span id="lib-label">Library</span>
+        </button>
+        <button class="btn-accent btn-sm" id="save-btn" title="Save current prompts as a layout">
+          💾 Save
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Scrollable body ─────────────────────────────────── -->
+    <div class="content">
+
+      <!-- Add Prompt section (collapsible) -->
+      <div class="add-section">
+        <button class="add-toggle" id="add-toggle">
+          <span>+ Add Prompt</span>
+          <span class="chevron">▼</span>
+        </button>
+        <div class="add-form hidden" id="add-form">
+          <input id="new-title" type="text" placeholder="Title…" autocomplete="off">
+          <textarea id="new-text" rows="3" placeholder="Prompt text…"></textarea>
+          <div>
+            <button class="btn-accent btn-sm" id="add-btn">Add</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Search bar -->
+      <div class="search-bar">
+        <span class="search-icon">🔍</span>
+        <input id="search-input" type="text" placeholder="Search prompts…" autocomplete="off">
+      </div>
+
+      <!-- Section label -->
+      <div id="prompts-label" class="section-label" style="display:none">Your Prompts</div>
+
+      <!-- Prompts list -->
+      <div id="prompts-container"></div>
+
+    </div><!-- /content -->
+
+    <!-- Toast notification -->
+    <div class="toast hidden" id="toast"></div>
+
+    <!-- ── Library Modal ─────────────────────────────────────── -->
+    <div class="modal-backdrop hidden" id="library-modal">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <div class="modal-title">
+            Library
+            <span id="lib-modal-count" class="count-badge" style="margin-left:6px;display:none"></span>
+          </div>
+          <button class="btn-accent btn-sm" id="close-library">✕ Close</button>
+        </div>
+
+        <!-- Import / Export toolbar -->
+        <div class="lib-toolbar">
+          <label class="lib-btn" title="Import a layout JSON file">
+            ↑ Import Layout
+            <input type="file" accept="application/json" hidden id="import-layout-input">
+          </label>
+          <button class="lib-btn" id="export-layout-btn" title="Export current prompts as JSON file">
+            ↓ Export Layout
+          </button>
+          <label class="lib-btn" title="Import a full library JSON file">
+            ↑ Import Library
+            <input type="file" accept="application/json" hidden id="import-library-input">
+          </label>
+          <button class="lib-btn" id="export-library-btn" title="Copy all layouts as JSON to clipboard">
+            ↓ Export Library
+          </button>
+        </div>
+
+        <!-- Layout list -->
+        <div class="modal-body">
+          <div id="layouts-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Edit Modal ────────────────────────────────────────── -->
+    <div class="modal-backdrop hidden" id="edit-modal">
+      <div class="modal-panel">
+        <div class="modal-header">
+          <div class="modal-title">Edit Prompt</div>
+          <button class="btn-default btn-sm" id="close-edit">✕ Cancel</button>
+        </div>
+        <div class="modal-body">
+          <div style="display:grid;gap:10px">
+            <input id="edit-title" type="text" placeholder="Title…" autocomplete="off">
+            <textarea id="edit-text" rows="7" placeholder="Prompt text…"></textarea>
+            <div>
+              <button class="btn-accent" id="save-edit-btn">Save Changes</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /app -->
+
+  <script src="sidebar.js"></script>
+</body>
+</html>

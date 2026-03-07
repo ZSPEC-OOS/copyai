@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "CopyAI — Prompt Manager",
+  "version": "1.0.0",
+  "description": "Instant access to your AI prompts and layouts from any webpage via a collapsible sidebar.",
+  "permissions": ["storage", "clipboardWrite", "tabs"],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_end"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["sidebar.html", "sidebar.css", "sidebar.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "action": {
+    "default_title": "Toggle CopyAI Sidebar"
+  }
+}
