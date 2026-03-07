@@ -10,6 +10,10 @@
   let searchQuery = '';
   let addOpen = false;
   let expandedIds = new Set();
+  let currentLayoutId = null;
+  let currentLayoutTitle = '';
+  let reorganizing = false;
+  let dragSrcIdx = null;
 
   // ── Storage ──────────────────────────────────────────────
   function loadData() {
@@ -114,6 +118,7 @@
     const countBadge = document.getElementById('prompt-count');
     const libLabel = document.getElementById('lib-label');
     const libModalCount = document.getElementById('lib-modal-count');
+    const saveBtnLabel = document.getElementById('save-btn-label');
 
     if (countBadge) {
       if (cards.length > 0) {
@@ -134,11 +139,18 @@
       libModalCount.textContent = layouts.length;
       libModalCount.style.display = layouts.length > 0 ? '' : 'none';
     }
+
+    if (saveBtnLabel) {
+      saveBtnLabel.textContent = currentLayoutId ? 'Save' : 'Save Layout';
+      const saveBtn = document.getElementById('save-btn');
+      if (saveBtn) saveBtn.title = currentLayoutId ? `Update "${currentLayoutTitle}"` : 'Save current prompts as a layout';
+    }
   }
 
   function renderPrompts() {
     const container = document.getElementById('prompts-container');
-    const label = document.getElementById('prompts-label');
+    const labelRow = document.getElementById('prompts-label-row');
+    const reorgBtn = document.getElementById('reorganize-btn');
     if (!container) return;
 
     const query = searchQuery.trim().toLowerCase();
@@ -149,7 +161,14 @@
         )
       : cards;
 
-    if (label) label.style.display = filtered.length > 0 ? '' : 'none';
+    if (labelRow) labelRow.style.display = filtered.length > 0 ? 'flex' : 'none';
+
+    // Show reorganize button only when there are multiple cards and no active search
+    if (reorgBtn) {
+      reorgBtn.style.display = cards.length > 1 && !query ? '' : 'none';
+      reorgBtn.textContent = reorganizing ? '✓ Done' : '⇅ Reorganize';
+      reorgBtn.className = reorganizing ? 'btn-accent btn-sm' : 'btn-default btn-sm';
+    }
 
     if (filtered.length === 0) {
       container.innerHTML =
@@ -168,22 +187,73 @@
     container.innerHTML = '';
     const list = document.createElement('div');
     list.className = 'prompts-list';
-    filtered.forEach(card => list.appendChild(buildCard(card)));
+    filtered.forEach((card, idx) => list.appendChild(buildCard(card, idx)));
     container.appendChild(list);
+
+    // Set up drag-and-drop on the list if reorganizing
+    if (reorganizing && !query) {
+      setupDragAndDrop(list);
+    }
   }
 
-  function buildCard(card) {
+  function setupDragAndDrop(list) {
+    let srcIdx = null;
+    const items = list.querySelectorAll('.prompt-card');
+    items.forEach((el, idx) => {
+      el.setAttribute('draggable', 'true');
+      el.addEventListener('dragstart', () => {
+        srcIdx = idx;
+        el.style.opacity = '0.4';
+      });
+      el.addEventListener('dragend', () => {
+        el.style.opacity = '';
+        srcIdx = null;
+        items.forEach(i => i.style.border = '');
+      });
+      el.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        items.forEach((i, ii) => {
+          i.style.border = ii === idx && ii !== srcIdx ? '2px solid #8b5cf6' : '';
+        });
+      });
+      el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        if (srcIdx === null || srcIdx === idx) return;
+        const next = [...cards];
+        const [moved] = next.splice(srcIdx, 1);
+        next.splice(idx, 0, moved);
+        cards = next;
+        saveCards();
+        renderPrompts();
+      });
+    });
+  }
+
+  function buildCard(card, idx) {
     const isExpanded = expandedIds.has(card.id);
     const showToggle = needsClamp(card.text) || isExpanded;
 
     const div = document.createElement('div');
     div.className = 'prompt-card';
+    if (reorganizing) {
+      div.style.cursor = 'grab';
+    }
 
-    // Copy badge
-    const badge = document.createElement('span');
-    badge.className = 'copy-badge';
-    badge.textContent = 'Copy';
-    div.appendChild(badge);
+    // Drag handle (reorganize mode)
+    if (reorganizing) {
+      const handle = document.createElement('div');
+      handle.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:8px;color:#6b7280;user-select:none;font-size:12px';
+      handle.innerHTML = '<span style="font-size:16px;line-height:1">⠿</span><span>Drag to reorder</span>';
+      div.appendChild(handle);
+    }
+
+    // Copy badge (only when not reorganizing)
+    if (!reorganizing) {
+      const badge = document.createElement('span');
+      badge.className = 'copy-badge';
+      badge.textContent = 'Copy';
+      div.appendChild(badge);
+    }
 
     // Title
     const titleEl = document.createElement('div');
@@ -238,8 +308,9 @@
 
     div.appendChild(actions);
 
-    // Click card body → copy text
+    // Click card body → copy text (disabled in reorganize mode)
     div.addEventListener('click', (e) => {
+      if (reorganizing) return;
       if (e.target.closest('button')) return;
       copyText(card.text);
     });
@@ -290,6 +361,9 @@
       openBtn.textContent = 'Open';
       openBtn.addEventListener('click', () => {
         cards = [...l.cards];
+        currentLayoutId = l.id;
+        currentLayoutTitle = l.title;
+        reorganizing = false;
         expandedIds.clear();
         saveCards();
         render();
@@ -353,17 +427,37 @@
   }
 
   // ── Save Layout ──────────────────────────────────────────
+  function doNewLayout() {
+    if (cards.length === 0) { showToast('No prompts to save'); return; }
+    const base = prompt('Layout name:', '');
+    if (base === null) return; // user cancelled
+    const title = nextUniqueTitle(base);
+    const id = 'L' + Date.now();
+    layouts.push({ id, title, savedAt: Date.now(), cards: [...cards] });
+    currentLayoutId = id;
+    currentLayoutTitle = title;
+    saveLayouts();
+    renderHeader();
+    showToast(`✓ Created: ${title}`);
+  }
+
   function setupSaveLayout() {
     document.getElementById('save-btn').addEventListener('click', () => {
       if (cards.length === 0) { showToast('No prompts to save'); return; }
-      const base = prompt('Layout name:', '');
-      if (base === null) return; // user cancelled
-      const title = nextUniqueTitle(base);
-      layouts.push({ id: 'L' + Date.now(), title, savedAt: Date.now(), cards: [...cards] });
-      saveLayouts();
-      renderHeader();
-      showToast(`✓ Saved: ${title}`);
+      if (currentLayoutId) {
+        // Update existing layout in-place
+        layouts = layouts.map(l =>
+          l.id === currentLayoutId ? { ...l, cards: [...cards], savedAt: Date.now() } : l
+        );
+        saveLayouts();
+        renderHeader();
+        showToast(`✓ Saved: ${currentLayoutTitle}`);
+      } else {
+        doNewLayout();
+      }
     });
+
+    document.getElementById('new-layout-btn').addEventListener('click', doNewLayout);
   }
 
   // ── Library Modal ────────────────────────────────────────
@@ -535,6 +629,14 @@
     });
   }
 
+  // ── Reorganize ───────────────────────────────────────────
+  function setupReorganize() {
+    document.getElementById('reorganize-btn').addEventListener('click', () => {
+      reorganizing = !reorganizing;
+      renderPrompts();
+    });
+  }
+
   // ── Init ─────────────────────────────────────────────────
   function init() {
     setupAddPrompt();
@@ -543,6 +645,7 @@
     setupEdit();
     setupSearch();
     setupKeyboard();
+    setupReorganize();
     loadData();
   }
 
