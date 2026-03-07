@@ -47,6 +47,25 @@ const LIB_BTN_STYLE: React.CSSProperties = {
   transition: 'all 0.15s ease',
 };
 
+// Dropdown menu item style
+const MENU_ITEM_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
+  width: '100%',
+  padding: '9px 12px',
+  borderRadius: 8,
+  background: 'transparent',
+  color: TEXT,
+  fontSize: 14,
+  fontWeight: 500,
+  border: 'none',
+  cursor: 'pointer',
+  textAlign: 'left',
+  transition: 'background 0.12s ease',
+  boxSizing: 'border-box',
+};
+
 export default function Page() {
   // ----------- State: auth -----------
   const [loggedIn, setLoggedIn] = useState(false);
@@ -93,6 +112,10 @@ export default function Page() {
   const [reorganizing, setReorganizing] = useState(false);
   const [dragSrcIdx, setDragSrcIdx] = useState<number | null>(null);
   const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
+  // Hamburger menu + clear confirmation
+  const [showMenu, setShowMenu] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   function toggleExpanded(id: string) {
     setExpanded(prev => {
@@ -223,6 +246,16 @@ export default function Page() {
     if (!confirm('Delete this prompt?')) return;
     setCards(prev => prev.filter(c => c.id !== id));
     toast('Prompt deleted');
+  }
+
+  function clearPrompts() {
+    setCards([]);
+    setCurrentLayoutId(null);
+    setCurrentLayoutTitle('');
+    setExpanded(new Set());
+    setReorganizing(false);
+    setShowClearConfirm(false);
+    toast('All prompts cleared');
   }
 
   // ----------- Drag-to-reorder -----------
@@ -509,9 +542,90 @@ export default function Page() {
     <div style={{ minHeight: '100svh', background: BG }}>
 
       {/* ── Sticky Header ─────────────────────────────────────── */}
-      <header className="header-bar">
-        {/* Logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
+      <header className="header-bar" style={{ justifyContent: 'center', position: 'relative' }}>
+
+        {/* Left: Hamburger menu */}
+        <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }}>
+          <button
+            className="btn-default btn-sm"
+            onClick={() => setShowMenu(m => !m)}
+            style={{ padding: '6px 10px', fontSize: 17, lineHeight: 1 }}
+            title="Menu"
+          >
+            ☰
+          </button>
+
+          {showMenu && (
+            <>
+              {/* Backdrop to close menu */}
+              <div
+                style={{ position: 'fixed', inset: 0, zIndex: 150 }}
+                onClick={() => setShowMenu(false)}
+              />
+              {/* Dropdown panel */}
+              <div style={{
+                position: 'absolute',
+                top: 'calc(100% + 8px)',
+                left: 0,
+                background: PANEL,
+                border: `1px solid ${BORDER}`,
+                borderRadius: 12,
+                padding: 6,
+                minWidth: 210,
+                zIndex: 200,
+                boxShadow: '0 8px 32px rgba(0,0,0,0.65)',
+                animation: 'fadeSlideIn 0.15s ease both',
+              }}>
+                {/* Library */}
+                <button
+                  style={MENU_ITEM_STYLE}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = SURFACE; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                  onClick={() => { setShowLibrary(true); setShowMenu(false); }}
+                >
+                  📚 Library
+                  {layouts.length > 0 && (
+                    <span style={{ background: ACCENT, color: '#fff', fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 10, marginLeft: 'auto' }}>
+                      {layouts.length}
+                    </span>
+                  )}
+                </button>
+
+                <div style={{ height: 1, background: BORDER, margin: '4px 0' }} />
+
+                {/* Current layout indicator */}
+                {currentLayoutId && (
+                  <div style={{ padding: '5px 12px', fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    ✦ {currentLayoutTitle}
+                  </div>
+                )}
+
+                {/* Save */}
+                <button
+                  style={MENU_ITEM_STYLE}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = SURFACE; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                  onClick={() => { saveLayout(); setShowMenu(false); }}
+                >
+                  💾 {currentLayoutId ? 'Save' : 'Save Layout'}
+                </button>
+
+                {/* New Layout */}
+                <button
+                  style={MENU_ITEM_STYLE}
+                  onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = SURFACE; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; }}
+                  onClick={() => { createNewLayout(); setShowMenu(false); }}
+                >
+                  + New Layout
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Center: Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Image
             src="/copyai_logo.png"
             alt="CopyAI logo"
@@ -530,54 +644,12 @@ export default function Page() {
           />
         </div>
 
-        {/* Prompt count badge */}
+        {/* Right: prompt count badge */}
         {cards.length > 0 && (
-          <span className="count-badge">
+          <span className="count-badge" style={{ position: 'absolute', right: 16, top: '50%', transform: 'translateY(-50%)' }}>
             {cards.length} prompt{cards.length !== 1 ? 's' : ''}
           </span>
         )}
-
-        {/* Spacer */}
-        <div style={{ flex: 1 }} />
-
-        {/* Actions */}
-        <button className="btn-default btn-sm" onClick={() => setShowLibrary(true)} title="Open Library">
-          📚 Library
-          {layouts.length > 0 && (
-            <span style={{
-              background: ACCENT,
-              color: '#fff',
-              fontSize: 10,
-              fontWeight: 700,
-              padding: '1px 6px',
-              borderRadius: 10,
-              marginLeft: 2,
-            }}>
-              {layouts.length}
-            </span>
-          )}
-        </button>
-
-        {currentLayoutId && (
-          <span style={{
-            fontSize: 12,
-            color: 'var(--text-muted)',
-            maxWidth: 110,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }} title={currentLayoutTitle}>
-            {currentLayoutTitle}
-          </span>
-        )}
-
-        <button className="btn-default btn-sm" onClick={createNewLayout} title="Save current prompts as a new layout">
-          + New Layout
-        </button>
-
-        <button className="btn-accent btn-sm" onClick={saveLayout} title={currentLayoutId ? `Update "${currentLayoutTitle}"` : 'Save current prompts as a layout'}>
-          💾 {currentLayoutId ? 'Save' : 'Save Layout'}
-        </button>
       </header>
 
       {/* ── Page body ─────────────────────────────────────────── */}
@@ -635,15 +707,68 @@ export default function Page() {
           <>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <p className="section-label" style={{ marginBottom: 0 }}>Your Prompts</p>
-              {cards.length > 1 && (
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {cards.length > 1 && (
+                  <button
+                    className={reorganizing ? 'btn-accent btn-sm' : 'btn-default btn-sm'}
+                    onClick={() => { setReorganizing(r => !r); setDragSrcIdx(null); setDragOverIdx(null); }}
+                  >
+                    {reorganizing ? '✓ Done Reorganizing' : '⇅ Reorganize'}
+                  </button>
+                )}
                 <button
-                  className={reorganizing ? 'btn-accent btn-sm' : 'btn-default btn-sm'}
-                  onClick={() => { setReorganizing(r => !r); setDragSrcIdx(null); setDragOverIdx(null); }}
+                  className="btn-danger btn-sm"
+                  onClick={() => { setShowClearConfirm(c => !c); }}
                 >
-                  {reorganizing ? '✓ Done Reorganizing' : '⇅ Reorganize'}
+                  🗑 Clear
                 </button>
-              )}
+              </div>
             </div>
+
+            {/* ── Clear confirmation banner ─────────────────────── */}
+            {showClearConfirm && (
+              <div style={{
+                background: 'rgba(239,68,68,0.07)',
+                border: '1px solid rgba(239,68,68,0.25)',
+                borderRadius: 10,
+                padding: '12px 16px',
+                marginBottom: 14,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                flexWrap: 'wrap',
+              }}>
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--danger)' }}>
+                    Clear all prompts?
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    Removes all {cards.length} prompt{cards.length !== 1 ? 's' : ''} from the page. Slide right to confirm.
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: '0 0 auto' }}>
+                  {/* Slide-to-confirm range input */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--danger)', whiteSpace: 'nowrap' }}>Slide →</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      defaultValue={0}
+                      onChange={e => { if (+e.target.value >= 95) clearPrompts(); }}
+                      style={{
+                        width: 100,
+                        accentColor: '#ef4444',
+                        cursor: 'pointer',
+                      }}
+                    />
+                  </div>
+                  <button onClick={() => setShowClearConfirm(false)} className="btn-default btn-sm">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
             <div style={{ display: 'grid', gap: 10 }}>
               {cards.map((c, idx) => {
                 const isEditing = editingId === c.id;
