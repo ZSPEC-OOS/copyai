@@ -1,0 +1,108 @@
+/* content.css — CopyAI Sidebar host-page styles */
+/* Uses !important throughout to resist host-page style overrides */
+
+#copyai-ext-root {
+  position: fixed !important;
+  top: 0 !important;
+  right: 0 !important;
+  height: 100% !important;
+  width: 0 !important;
+  z-index: 2147483647 !important; /* max z-index */
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  pointer-events: none !important;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  font-family: system-ui, sans-serif !important;
+}
+
+/* Expanded state */
+#copyai-ext-root.copyai-open {
+  width: 380px !important;
+}
+
+/* ---- Sidebar iframe ---- */
+#copyai-ext-frame {
+  pointer-events: none !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  height: 100% !important;
+  border: none !important;
+  display: block !important;
+  flex-shrink: 0 !important;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  overflow: hidden !important;
+}
+
+#copyai-ext-root.copyai-open #copyai-ext-frame {
+  pointer-events: all !important;
+  width: 380px !important;
+  min-width: 380px !important;
+}
+
+/* ---- Toggle tab ---- */
+#copyai-ext-tab {
+  all: unset !important;
+  pointer-events: all !important;
+  position: absolute !important;
+  right: 0 !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 36px !important;
+  height: auto !important;
+  min-height: 110px !important;
+  background: #8b5cf6 !important;
+  color: #ffffff !important;
+  border: none !important;
+  border-radius: 10px 0 0 10px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 14px 8px !important;
+  gap: 10px !important;
+  box-shadow: -3px 0 20px rgba(139, 92, 246, 0.4) !important;
+  transition: background 0.2s ease, width 0.2s ease, right 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  z-index: 1 !important;
+  outline: none !important;
+  box-sizing: border-box !important;
+}
+
+#copyai-ext-tab:hover {
+  background: #7c3aed !important;
+  width: 42px !important;
+}
+
+#copyai-ext-tab:focus-visible {
+  outline: 2px solid #a78bfa !important;
+  outline-offset: 2px !important;
+}
+
+/* Shift tab when sidebar is open */
+#copyai-ext-root.copyai-open #copyai-ext-tab {
+  right: 380px !important;
+}
+
+/* SVG icon inside tab */
+#copyai-ext-tab svg {
+  width: 18px !important;
+  height: 18px !important;
+  flex-shrink: 0 !important;
+  display: block !important;
+}
+
+/* Vertical label */
+#copyai-ext-tab span {
+  display: block !important;
+  writing-mode: vertical-lr !important;
+  transform: rotate(180deg) !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+  white-space: nowrap !important;
+  font-family: system-ui, sans-serif !important;
+  line-height: 1 !important;
+}
