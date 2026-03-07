@@ -1,5 +1,71 @@
 /* sidebar.css — CopyAI Sidebar styles (runs inside iframe, no conflicts) */
 
+/* ── Login / Loading screens ─────────────────────────────── */
+.login-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px 20px;
+  gap: 28px;
+  background: var(--bg);
+}
+
+.login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.login-title {
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.login-sub {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.login-form {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+}
+
+.login-error {
+  font-size: 12px;
+  color: var(--danger);
+  font-weight: 500;
+  text-align: center;
+  background: rgba(239,68,68,.1);
+  border: 1px solid rgba(239,68,68,.25);
+  border-radius: 7px;
+  padding: 7px 12px;
+}
+
+.loading-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 14px;
+  background: var(--bg);
+}
+
+.loading-text {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.hidden { display: none !important; }
+
 :root {
   --bg:          #08060f;
   --panel:       #110d1f;

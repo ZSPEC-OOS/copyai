@@ -1,41 +1,121 @@
-// sidebar.js — CopyAI Browser Extension Sidebar Logic
-// Uses chrome.storage.local instead of Firebase — no network needed.
+// sidebar.js — CopyAI Browser Extension Sidebar
+// Uses Firebase Firestore REST API for cloud sync (same data as the website).
 (function () {
   'use strict';
 
-  // ── State ────────────────────────────────────────────────
-  let cards = [];
-  let layouts = [];
-  let editingId = null;
-  let searchQuery = '';
-  let addOpen = false;
-  let expandedIds = new Set();
+  // ── Firebase config (matches lib/firebase.ts) ────────────
+  const FB_API_KEY   = 'AIzaSyALNxKQjAlTTpzcmBusII-zmiNjgXjnDhU';
+  const FB_PROJECT   = 'copyai-c2e3b';
+  const FB_DOC_PATH  = `projects/${FB_PROJECT}/databases/(default)/documents/users/jesse`;
+  const FIRESTORE    = `https://firestore.googleapis.com/v1/${FB_DOC_PATH}?key=${FB_API_KEY}`;
 
-  // ── Storage ──────────────────────────────────────────────
-  function loadData() {
-    chrome.storage.local.get(['cards', 'layouts'], (result) => {
-      cards = result.cards || [];
-      layouts = result.layouts || [];
-      render();
+  // ── State ────────────────────────────────────────────────
+  let cards      = [];
+  let layouts    = [];
+  let editingId  = null;
+  let searchQuery = '';
+  let addOpen    = false;
+  let expandedIds = new Set();
+  let saveTimer  = null;  // debounce Firestore writes
+
+  // ── Firestore REST helpers ───────────────────────────────
+  // Convert a plain JS value → Firestore REST value object
+  function toFV(val) {
+    if (val === null || val === undefined) return { nullValue: null };
+    if (typeof val === 'boolean')          return { booleanValue: val };
+    if (typeof val === 'number') {
+      return Number.isInteger(val)
+        ? { integerValue: String(val) }
+        : { doubleValue: val };
+    }
+    if (typeof val === 'string')           return { stringValue: val };
+    if (Array.isArray(val))                return { arrayValue: { values: val.map(toFV) } };
+    if (typeof val === 'object') {
+      const fields = {};
+      for (const [k, v] of Object.entries(val)) fields[k] = toFV(v);
+      return { mapValue: { fields } };
+    }
+    return { stringValue: String(val) };
+  }
+
+  // Convert a Firestore REST value object → plain JS value
+  function fromFV(fv) {
+    if (!fv)                    return null;
+    if ('nullValue'    in fv)   return null;
+    if ('booleanValue' in fv)   return fv.booleanValue;
+    if ('integerValue' in fv)   return Number(fv.integerValue);
+    if ('doubleValue'  in fv)   return fv.doubleValue;
+    if ('stringValue'  in fv)   return fv.stringValue;
+    if ('arrayValue'   in fv)   return (fv.arrayValue.values || []).map(fromFV);
+    if ('mapValue'     in fv) {
+      const obj = {};
+      for (const [k, v] of Object.entries(fv.mapValue.fields || {})) obj[k] = fromFV(v);
+      return obj;
+    }
+    return null;
+  }
+
+  // Read cards + layouts from Firestore
+  async function firestoreLoad() {
+    const res = await fetch(FIRESTORE);
+    if (!res.ok) throw new Error('Firestore read failed: ' + res.status);
+    const doc = await res.json();
+    const fields = doc.fields || {};
+    return {
+      cards:   fields.cards   ? fromFV(fields.cards)   : [],
+      layouts: fields.layouts ? fromFV(fields.layouts) : [],
+    };
+  }
+
+  // Write cards + layouts to Firestore (PATCH with updateMask)
+  async function firestoreSave() {
+    const url = FIRESTORE + '&updateMask.fieldPaths=cards&updateMask.fieldPaths=layouts';
+    const body = {
+      fields: {
+        cards:   toFV(cards),
+        layouts: toFV(layouts),
+      },
+    };
+    const res = await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error('Firestore write failed: ' + res.status);
+  }
+
+  // Debounced save — waits 800ms after last change before writing
+  function scheduleSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      firestoreSave().catch(() => showToast('⚠ Sync error — check your connection'));
+    }, 800);
+  }
+
+  // ── Auth (simple hardcoded credentials, same as website) ─
+  function checkLogin(user, pass) {
+    return user === 'Jesse' && pass === 'copyai';
+  }
+
+  function isLoggedIn() {
+    return new Promise(resolve => {
+      chrome.storage.local.get('copyai_logged_in', r => resolve(!!r.copyai_logged_in));
     });
   }
 
-  function saveCards() {
-    chrome.storage.local.set({ cards });
+  function setLoggedIn(val) {
+    return new Promise(resolve => {
+      chrome.storage.local.set({ copyai_logged_in: val }, resolve);
+    });
   }
 
-  function saveLayouts() {
-    chrome.storage.local.set({ layouts });
+  // ── Screens ──────────────────────────────────────────────
+  function showScreen(name) {
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.getElementById('main-app').classList.add('hidden');
+    document.getElementById(name).classList.remove('hidden');
   }
-
-  // Listen for storage changes from other extension pages (if any)
-  chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local') return;
-    let changed = false;
-    if (changes.cards) { cards = changes.cards.newValue || []; changed = true; }
-    if (changes.layouts) { layouts = changes.layouts.newValue || []; changed = true; }
-    if (changed) render();
-  });
 
   // ── Utilities ────────────────────────────────────────────
   function fmt(ts) {
@@ -48,8 +128,7 @@
   function nextUniqueTitle(base) {
     const titles = new Set(layouts.map(l => l.title));
     let t = (base || 'Untitled').trim() || 'Untitled';
-    let attempt = t;
-    let n = 2;
+    let attempt = t, n = 2;
     while (titles.has(attempt)) { attempt = t + '-' + n; n++; }
     return attempt;
   }
@@ -59,18 +138,17 @@
     return text.split(/\r?\n/).length > 3 || text.length > 200;
   }
 
-  let toastTimer = null;
+  let toastTimer2 = null;
   function showToast(msg) {
     const el = document.getElementById('toast');
     if (!el) return;
     el.textContent = msg;
     el.classList.remove('hidden');
-    // restart animation
     el.style.animation = 'none';
-    el.offsetHeight; // reflow
+    el.offsetHeight;
     el.style.animation = '';
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => el.classList.add('hidden'), 2000);
+    if (toastTimer2) clearTimeout(toastTimer2);
+    toastTimer2 = setTimeout(() => el.classList.add('hidden'), 2000);
   }
 
   async function copyText(text) {
@@ -79,7 +157,6 @@
       await navigator.clipboard.writeText(text);
       showToast('✓ Copied to clipboard');
     } catch {
-      // Fallback for environments where clipboard API isn't available
       try {
         const ta = document.createElement('textarea');
         ta.value = text;
@@ -95,15 +172,6 @@
     }
   }
 
-  function esc(str) {
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
-  }
-
   // ── Render ───────────────────────────────────────────────
   function render() {
     renderHeader();
@@ -111,9 +179,9 @@
   }
 
   function renderHeader() {
-    const countBadge = document.getElementById('prompt-count');
-    const libLabel = document.getElementById('lib-label');
-    const libModalCount = document.getElementById('lib-modal-count');
+    const countBadge     = document.getElementById('prompt-count');
+    const libLabel       = document.getElementById('lib-label');
+    const libModalCount  = document.getElementById('lib-modal-count');
 
     if (countBadge) {
       if (cards.length > 0) {
@@ -123,13 +191,9 @@
         countBadge.style.display = 'none';
       }
     }
-
     if (libLabel) {
-      libLabel.textContent = layouts.length > 0
-        ? `Library (${layouts.length})`
-        : 'Library';
+      libLabel.textContent = layouts.length > 0 ? `Library (${layouts.length})` : 'Library';
     }
-
     if (libModalCount) {
       libModalCount.textContent = layouts.length;
       libModalCount.style.display = layouts.length > 0 ? '' : 'none';
@@ -138,10 +202,10 @@
 
   function renderPrompts() {
     const container = document.getElementById('prompts-container');
-    const label = document.getElementById('prompts-label');
+    const label     = document.getElementById('prompts-label');
     if (!container) return;
 
-    const query = searchQuery.trim().toLowerCase();
+    const query    = searchQuery.trim().toLowerCase();
     const filtered = query
       ? cards.filter(c =>
           c.title.toLowerCase().includes(query) ||
@@ -156,10 +220,7 @@
         '<div class="empty-state">' +
           '<div class="empty-icon">✦</div>' +
           '<div class="empty-text">' +
-            (query
-              ? 'No prompts match your search.'
-              : 'No prompts yet.<br>Add one above to get started.'
-            ) +
+            (query ? 'No prompts match your search.' : 'No prompts yet.<br>Add one above to get started.') +
           '</div>' +
         '</div>';
       return;
@@ -179,26 +240,24 @@
     const div = document.createElement('div');
     div.className = 'prompt-card';
 
-    // Copy badge
     const badge = document.createElement('span');
     badge.className = 'copy-badge';
     badge.textContent = 'Copy';
     div.appendChild(badge);
 
-    // Title
     const titleEl = document.createElement('div');
     titleEl.className = 'prompt-title';
     titleEl.title = card.title || 'Untitled';
     titleEl.textContent = card.title || 'Untitled';
     div.appendChild(titleEl);
 
-    // Text preview
     const textEl = document.createElement('div');
-    textEl.className = 'prompt-text' + (isExpanded ? ' expanded' : '') + (!card.text ? ' empty' : '');
+    textEl.className = 'prompt-text' +
+      (isExpanded ? ' expanded' : '') +
+      (!card.text ? ' empty' : '');
     textEl.textContent = card.text || '(empty)';
     div.appendChild(textEl);
 
-    // Action buttons row
     const actions = document.createElement('div');
     actions.className = 'card-actions';
 
@@ -216,8 +275,8 @@
       if (confirm(`Delete "${card.title || 'this prompt'}"?`)) {
         cards = cards.filter(c => c.id !== card.id);
         expandedIds.delete(card.id);
-        saveCards();
         render();
+        scheduleSave();
         showToast('Prompt deleted');
       }
     });
@@ -238,7 +297,6 @@
 
     div.appendChild(actions);
 
-    // Click card body → copy text
     div.addEventListener('click', (e) => {
       if (e.target.closest('button')) return;
       copyText(card.text);
@@ -247,7 +305,7 @@
     return div;
   }
 
-  // ── Library Render ───────────────────────────────────────
+  // ── Library ──────────────────────────────────────────────
   function renderLibrary() {
     renderHeader();
     const list = document.getElementById('layouts-list');
@@ -291,8 +349,8 @@
       openBtn.addEventListener('click', () => {
         cards = [...l.cards];
         expandedIds.clear();
-        saveCards();
         render();
+        scheduleSave();
         closeLibrary();
         showToast(`Opened: ${l.title}`);
       });
@@ -303,7 +361,7 @@
       delBtn.addEventListener('click', () => {
         if (confirm(`Delete layout "${l.title}"?`)) {
           layouts = layouts.filter(x => x.id !== l.id);
-          saveLayouts();
+          scheduleSave();
           renderLibrary();
           showToast('Layout deleted');
         }
@@ -317,13 +375,16 @@
     });
   }
 
+  function openLibrary()  { renderLibrary(); document.getElementById('library-modal').classList.remove('hidden'); }
+  function closeLibrary() { document.getElementById('library-modal').classList.add('hidden'); }
+
   // ── Add Prompt ───────────────────────────────────────────
   function setupAddPrompt() {
-    const toggle = document.getElementById('add-toggle');
-    const form = document.getElementById('add-form');
+    const toggle     = document.getElementById('add-toggle');
+    const form       = document.getElementById('add-form');
     const titleInput = document.getElementById('new-title');
-    const textInput = document.getElementById('new-text');
-    const addBtn = document.getElementById('add-btn');
+    const textInput  = document.getElementById('new-text');
+    const addBtn     = document.getElementById('add-btn');
 
     toggle.addEventListener('click', () => {
       addOpen = !addOpen;
@@ -339,17 +400,15 @@
       const id = 'c' + Date.now() + Math.random().toString(36).slice(2, 6);
       cards.push({ id, title: t || 'Untitled', text: x, createdAt: Date.now() });
       titleInput.value = '';
-      textInput.value = '';
+      textInput.value  = '';
       titleInput.focus();
-      saveCards();
       render();
+      scheduleSave();
       showToast('✓ Prompt added');
     }
 
     addBtn.addEventListener('click', doAdd);
-    titleInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); doAdd(); }
-    });
+    titleInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doAdd(); } });
   }
 
   // ── Save Layout ──────────────────────────────────────────
@@ -357,58 +416,41 @@
     document.getElementById('save-btn').addEventListener('click', () => {
       if (cards.length === 0) { showToast('No prompts to save'); return; }
       const base = prompt('Layout name:', '');
-      if (base === null) return; // user cancelled
+      if (base === null) return;
       const title = nextUniqueTitle(base);
       layouts.push({ id: 'L' + Date.now(), title, savedAt: Date.now(), cards: [...cards] });
-      saveLayouts();
+      scheduleSave();
       renderHeader();
       showToast(`✓ Saved: ${title}`);
     });
   }
 
-  // ── Library Modal ────────────────────────────────────────
-  function openLibrary() {
-    renderLibrary();
-    document.getElementById('library-modal').classList.remove('hidden');
-  }
-
-  function closeLibrary() {
-    document.getElementById('library-modal').classList.add('hidden');
-  }
-
+  // ── Library modal events ─────────────────────────────────
   function setupLibrary() {
     document.getElementById('library-btn').addEventListener('click', openLibrary);
     document.getElementById('close-library').addEventListener('click', closeLibrary);
-
-    // Close on backdrop click
-    document.getElementById('library-modal').addEventListener('click', (e) => {
+    document.getElementById('library-modal').addEventListener('click', e => {
       if (e.target === e.currentTarget) closeLibrary();
     });
 
-    // Export current cards as JSON file
     document.getElementById('export-layout-btn').addEventListener('click', () => {
       if (cards.length === 0) { showToast('No prompts to export'); return; }
       const blob = new Blob([JSON.stringify({ cards }, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'prompts.json';
-      a.click();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = 'prompts.json'; a.click();
       URL.revokeObjectURL(url);
       showToast('✓ Layout exported');
     });
 
-    // Export full library to clipboard
     document.getElementById('export-library-btn').addEventListener('click', () => {
       if (layouts.length === 0) { showToast('No layouts to export'); return; }
-      const payload = JSON.stringify({ layouts }, null, 2);
-      navigator.clipboard.writeText(payload)
+      navigator.clipboard.writeText(JSON.stringify({ layouts }, null, 2))
         .then(() => showToast('✓ Library copied to clipboard'))
         .catch(() => showToast('⚠ Copy failed'));
     });
 
-    // Import a layout JSON file
-    document.getElementById('import-layout-input').addEventListener('change', (e) => {
+    document.getElementById('import-layout-input').addEventListener('change', e => {
       const file = e.target.files[0];
       if (!file) return;
       file.text().then(t => {
@@ -422,16 +464,15 @@
           createdAt: Number.isFinite(+c.createdAt) ? +c.createdAt : Date.now() - i,
         })).sort((a, b) => a.createdAt - b.createdAt);
         expandedIds.clear();
-        saveCards();
         render();
+        scheduleSave();
         closeLibrary();
         showToast('✓ Layout imported');
         e.target.value = '';
       }).catch(() => showToast('⚠ Failed to read file'));
     });
 
-    // Import a library JSON file (merges with existing)
-    document.getElementById('import-library-input').addEventListener('change', (e) => {
+    document.getElementById('import-library-input').addEventListener('change', e => {
       const file = e.target.files[0];
       if (!file) return;
       file.text().then(t => {
@@ -453,16 +494,11 @@
           let n = 2;
           while (existingTitles.has(attempt)) { attempt = String(l?.title ?? 'Untitled').trim() + '-' + n; n++; }
           existingTitles.add(attempt);
-          return {
-            id: 'L' + Date.now() + '_' + li,
-            title: attempt,
-            savedAt: Number.isFinite(+l?.savedAt) ? +l.savedAt : Date.now() - li,
-            cards: cardsArr,
-          };
+          return { id: 'L' + Date.now() + '_' + li, title: attempt, savedAt: Number.isFinite(+l?.savedAt) ? +l.savedAt : Date.now() - li, cards: cardsArr };
         });
         if (normalized.length === 0) { showToast('No layouts found in file'); return; }
         layouts.push(...normalized);
-        saveLayouts();
+        scheduleSave();
         renderLibrary();
         showToast(`✓ Imported ${normalized.length} layout${normalized.length !== 1 ? 's' : ''}`);
         e.target.value = '';
@@ -476,7 +512,7 @@
     if (!card) return;
     editingId = id;
     document.getElementById('edit-title').value = card.title;
-    document.getElementById('edit-text').value = card.text;
+    document.getElementById('edit-text').value  = card.text;
     document.getElementById('edit-modal').classList.remove('hidden');
     document.getElementById('edit-title').focus();
   }
@@ -488,23 +524,20 @@
 
   function setupEdit() {
     document.getElementById('close-edit').addEventListener('click', closeEdit);
-    document.getElementById('edit-modal').addEventListener('click', (e) => {
+    document.getElementById('edit-modal').addEventListener('click', e => {
       if (e.target === e.currentTarget) closeEdit();
     });
-
     document.getElementById('save-edit-btn').addEventListener('click', () => {
       if (!editingId) return;
       const t = document.getElementById('edit-title').value.trim() || 'Untitled';
       const x = document.getElementById('edit-text').value;
       cards = cards.map(c => c.id === editingId ? { ...c, title: t, text: x } : c);
-      saveCards();
       render();
+      scheduleSave();
       closeEdit();
       showToast('✓ Saved');
     });
-
-    // Save on Ctrl/Cmd + Enter inside edit textarea
-    document.getElementById('edit-text').addEventListener('keydown', (e) => {
+    document.getElementById('edit-text').addEventListener('keydown', e => {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
         document.getElementById('save-edit-btn').click();
@@ -514,7 +547,7 @@
 
   // ── Search ───────────────────────────────────────────────
   function setupSearch() {
-    document.getElementById('search-input').addEventListener('input', (e) => {
+    document.getElementById('search-input').addEventListener('input', e => {
       searchQuery = e.target.value;
       renderPrompts();
     });
@@ -522,28 +555,87 @@
 
   // ── Keyboard shortcuts ───────────────────────────────────
   function setupKeyboard() {
-    document.addEventListener('keydown', (e) => {
-      // Escape closes any open modal
+    document.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
-        if (!document.getElementById('library-modal').classList.contains('hidden')) {
-          closeLibrary(); return;
-        }
-        if (!document.getElementById('edit-modal').classList.contains('hidden')) {
-          closeEdit(); return;
-        }
+        if (!document.getElementById('library-modal').classList.contains('hidden')) { closeLibrary(); return; }
+        if (!document.getElementById('edit-modal').classList.contains('hidden'))   { closeEdit();    return; }
       }
     });
   }
 
+  // ── Login setup ──────────────────────────────────────────
+  function setupLogin() {
+    const userInput  = document.getElementById('login-user');
+    const passInput  = document.getElementById('login-pass');
+    const loginBtn   = document.getElementById('login-btn');
+    const errorEl    = document.getElementById('login-error');
+
+    function doLogin() {
+      const user = userInput.value.trim();
+      const pass = passInput.value;
+      if (!checkLogin(user, pass)) {
+        errorEl.textContent = 'Incorrect username or password.';
+        errorEl.classList.remove('hidden');
+        passInput.value = '';
+        passInput.focus();
+        return;
+      }
+      errorEl.classList.add('hidden');
+      setLoggedIn(true).then(loadAndShow);
+    }
+
+    loginBtn.addEventListener('click', doLogin);
+    passInput.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+    userInput.addEventListener('keydown', e => { if (e.key === 'Enter') passInput.focus(); });
+  }
+
+  // ── Logout ───────────────────────────────────────────────
+  function setupLogout() {
+    document.getElementById('logout-btn').addEventListener('click', () => {
+      if (!confirm('Sign out of CopyAI?')) return;
+      setLoggedIn(false).then(() => {
+        cards = []; layouts = []; expandedIds.clear(); searchQuery = '';
+        showScreen('login-screen');
+        document.getElementById('login-user').value = '';
+        document.getElementById('login-pass').value = '';
+      });
+    });
+  }
+
+  // ── Load from Firestore and show main UI ─────────────────
+  async function loadAndShow() {
+    showScreen('loading-screen');
+    try {
+      const data = await firestoreLoad();
+      cards   = data.cards   || [];
+      layouts = data.layouts || [];
+      showScreen('main-app');
+      render();
+    } catch {
+      // Firestore unavailable — fall back to empty state, still show app
+      showScreen('main-app');
+      showToast('⚠ Could not load from cloud — check connection');
+      render();
+    }
+  }
+
   // ── Init ─────────────────────────────────────────────────
-  function init() {
+  async function init() {
+    setupLogin();
+    setupLogout();
     setupAddPrompt();
     setupSaveLayout();
     setupLibrary();
     setupEdit();
     setupSearch();
     setupKeyboard();
-    loadData();
+
+    const loggedIn = await isLoggedIn();
+    if (loggedIn) {
+      await loadAndShow();
+    } else {
+      showScreen('login-screen');
+    }
   }
 
   if (document.readyState === 'loading') {
