@@ -86,6 +86,14 @@ export default function Page() {
   // Expand/collapse per card
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
+  // Track which layout is currently loaded (for Save vs Create New)
+  const [currentLayoutId, setCurrentLayoutId] = useState<string | null>(null);
+
+  // Reorganize (drag-to-reorder) mode
+  const [reorganizing, setReorganizing] = useState(false);
+  const [dragSrcIdx, setDragSrcIdx] = useState<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
+
   function toggleExpanded(id: string) {
     setExpanded(prev => {
       const next = new Set(prev);
@@ -217,15 +225,56 @@ export default function Page() {
     toast('Prompt deleted');
   }
 
+  // ----------- Drag-to-reorder -----------
+  function onDragStart(idx: number) {
+    setDragSrcIdx(idx);
+  }
+
+  function onDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    setDragOverIdx(idx);
+  }
+
+  function onDrop(idx: number) {
+    if (dragSrcIdx === null || dragSrcIdx === idx) { setDragSrcIdx(null); setDragOverIdx(null); return; }
+    const next = [...cards];
+    const [moved] = next.splice(dragSrcIdx, 1);
+    next.splice(idx, 0, moved);
+    setCards(next);
+    setDragSrcIdx(null);
+    setDragOverIdx(null);
+  }
+
+  function onDragEnd() {
+    setDragSrcIdx(null);
+    setDragOverIdx(null);
+  }
+
   // ----------- Layout actions -----------
   function saveLayout() {
     if (cards.length === 0) { toast('No prompts to save'); return; }
-    const base = prompt('Layout name:', currentLayoutTitle || '') ?? '';
+    if (currentLayoutId) {
+      // Update the existing layout in-place
+      setLayouts(prev => prev.map(l =>
+        l.id === currentLayoutId ? { ...l, cards, savedAt: Date.now() } : l
+      ));
+      toast(`✓ Saved: ${currentLayoutTitle}`);
+    } else {
+      createNewLayout();
+    }
+  }
+
+  function createNewLayout() {
+    if (cards.length === 0) { toast('No prompts to save'); return; }
+    const base = prompt('Layout name:', currentLayoutTitle || '');
+    if (base === null) return; // user cancelled
     const uniqueTitle = nextUniqueTitle(base);
-    const entry: LayoutEntry = { id: 'L' + Date.now(), title: uniqueTitle, savedAt: Date.now(), cards };
+    const id = 'L' + Date.now();
+    const entry: LayoutEntry = { id, title: uniqueTitle, savedAt: Date.now(), cards };
     setLayouts(prev => [...prev, entry]);
     setCurrentLayoutTitle(uniqueTitle);
-    toast(`✓ Saved: ${uniqueTitle}`);
+    setCurrentLayoutId(id);
+    toast(`✓ Created: ${uniqueTitle}`);
   }
 
   function openLayout(id: string) {
@@ -233,8 +282,10 @@ export default function Page() {
     if (!lay) return;
     setCards(lay.cards);
     setCurrentLayoutTitle(lay.title);
+    setCurrentLayoutId(id);
     setShowLibrary(false);
     setExpanded(new Set());
+    setReorganizing(false);
     toast(`Opened: ${lay.title}`);
   }
 
@@ -507,8 +558,25 @@ export default function Page() {
           )}
         </button>
 
-        <button className="btn-accent btn-sm" onClick={saveLayout} title="Save current prompts as a layout">
-          💾 Save Layout
+        {currentLayoutId && (
+          <span style={{
+            fontSize: 12,
+            color: 'var(--text-muted)',
+            maxWidth: 110,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }} title={currentLayoutTitle}>
+            {currentLayoutTitle}
+          </span>
+        )}
+
+        <button className="btn-default btn-sm" onClick={createNewLayout} title="Save current prompts as a new layout">
+          + New Layout
+        </button>
+
+        <button className="btn-accent btn-sm" onClick={saveLayout} title={currentLayoutId ? `Update "${currentLayoutTitle}"` : 'Save current prompts as a layout'}>
+          💾 {currentLayoutId ? 'Save' : 'Save Layout'}
         </button>
       </header>
 
@@ -565,34 +633,62 @@ export default function Page() {
           </div>
         ) : (
           <>
-            <p className="section-label" style={{ marginBottom: 12 }}>Your Prompts</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <p className="section-label" style={{ marginBottom: 0 }}>Your Prompts</p>
+              {cards.length > 1 && (
+                <button
+                  className={reorganizing ? 'btn-accent btn-sm' : 'btn-default btn-sm'}
+                  onClick={() => { setReorganizing(r => !r); setDragSrcIdx(null); setDragOverIdx(null); }}
+                >
+                  {reorganizing ? '✓ Done Reorganizing' : '⇅ Reorganize'}
+                </button>
+              )}
+            </div>
             <div style={{ display: 'grid', gap: 10 }}>
-              {cards.map((c) => {
+              {cards.map((c, idx) => {
                 const isEditing = editingId === c.id;
                 const isExpanded = expanded.has(c.id);
                 const showToggle = needsClamp(c.text) || isExpanded;
+                const isDragSrc = reorganizing && dragSrcIdx === idx;
+                const isDragTarget = reorganizing && dragOverIdx === idx && dragSrcIdx !== idx;
 
                 return (
                   <div
                     key={c.id}
-                    className={isEditing ? undefined : 'prompt-card'}
+                    draggable={reorganizing && !isEditing}
+                    onDragStart={reorganizing ? () => onDragStart(idx) : undefined}
+                    onDragOver={reorganizing ? (e) => onDragOver(e, idx) : undefined}
+                    onDrop={reorganizing ? () => onDrop(idx) : undefined}
+                    onDragEnd={reorganizing ? onDragEnd : undefined}
+                    className={!isEditing && !reorganizing ? 'prompt-card' : undefined}
                     onClick={(e) => {
-                      if (isEditing) return;
+                      if (isEditing || reorganizing) return;
                       if ((e.target as HTMLElement).closest('[data-nocopy]')) return;
                       copyNow(c.text);
                     }}
                     style={{
                       background: SURFACE,
-                      border: `1px solid ${BORDER}`,
+                      border: isDragTarget ? `2px solid ${ACCENT}` : `1px solid ${BORDER}`,
                       borderRadius: 12,
                       padding: 16,
                       boxSizing: 'border-box',
                       overflow: 'hidden',
                       position: 'relative',
+                      opacity: isDragSrc ? 0.4 : 1,
+                      cursor: reorganizing ? 'grab' : isEditing ? 'default' : 'pointer',
+                      transition: 'opacity 0.15s ease, border-color 0.15s ease',
                     }}
                   >
-                    {/* Copy badge (shown on hover via CSS) */}
-                    {!isEditing && <span className="copy-badge">Copy</span>}
+                    {/* Drag handle in reorganize mode */}
+                    {reorganizing && !isEditing && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, color: 'var(--text-muted)', userSelect: 'none' }}>
+                        <span style={{ fontSize: 18, lineHeight: 1 }}>⠿</span>
+                        <span style={{ fontSize: 12, fontWeight: 500 }}>Drag to reorder</span>
+                      </div>
+                    )}
+
+                    {/* Copy badge (shown on hover via CSS, hidden in reorganize mode) */}
+                    {!isEditing && !reorganizing && <span className="copy-badge">Copy</span>}
 
                     {isEditing ? (
                       <div style={{ display: 'grid', gap: 10 }}>

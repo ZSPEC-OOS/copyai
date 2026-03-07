@@ -20,8 +20,11 @@
         <button class="btn-default btn-sm" id="library-btn" title="Open layout library">
           📚 <span id="lib-label">Library</span>
         </button>
-        <button class="btn-accent btn-sm" id="save-btn" title="Save current prompts as a layout">
-          💾 Save
+        <button class="btn-default btn-sm" id="new-layout-btn" title="Save current prompts as a new layout">
+          + New
+        </button>
+        <button class="btn-accent btn-sm" id="save-btn" title="Save current layout">
+          💾 <span id="save-btn-label">Save</span>
         </button>
       </div>
     </header>
@@ -50,8 +53,11 @@
         <input id="search-input" type="text" placeholder="Search prompts…" autocomplete="off">
       </div>
 
-      <!-- Section label -->
-      <div id="prompts-label" class="section-label" style="display:none">Your Prompts</div>
+      <!-- Section label + Reorganize button -->
+      <div id="prompts-label-row" style="display:none;align-items:center;justify-content:space-between;margin-bottom:6px;padding:0 12px">
+        <div class="section-label" style="margin-bottom:0">Your Prompts</div>
+        <button class="btn-default btn-sm" id="reorganize-btn" style="display:none">⇅ Reorganize</button>
+      </div>
 
       <!-- Prompts list -->
       <div id="prompts-container"></div>
