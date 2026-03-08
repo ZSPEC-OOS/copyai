@@ -2,7 +2,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -46,6 +46,15 @@ const LIB_BTN_STYLE: React.CSSProperties = {
   whiteSpace: 'nowrap',
   transition: 'all 0.15s ease',
 };
+
+// Map CopyAI's internal layout shape to what WrkFlow expects
+function mapToWrkFlowShape(layout: LayoutEntry) {
+  return {
+    id: layout.id,
+    title: layout.title,
+    prompts: layout.cards.map(c => ({ id: c.id, title: c.title, content: c.text })),
+  };
+}
 
 // Dropdown menu item style
 const MENU_ITEM_STYLE: React.CSSProperties = {
@@ -123,6 +132,14 @@ export default function Page() {
   const [showMenu, setShowMenu] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  // Refs so the WrkFlow message listener always sees current values without re-registering
+  const layoutsRef = useRef<LayoutEntry[]>(layouts);
+  useEffect(() => { layoutsRef.current = layouts; }, [layouts]);
+  const dataLoadedRef = useRef(false);
+  useEffect(() => { dataLoadedRef.current = dataLoaded; }, [dataLoaded]);
+  // If WRKFLOW_REQUEST_LIBRARY arrives before Firestore finishes loading, store it here
+  const pendingLibraryReqRef = useRef<{ source: MessageEventSource; origin: string } | null>(null);
+
   function toggleExpanded(id: string) {
     setExpanded(prev => {
       const next = new Set(prev);
@@ -156,6 +173,54 @@ export default function Page() {
     if (!dataLoaded) return;
     setDoc(doc(db, 'users', 'jesse'), { layouts }, { merge: true });
   }, [layouts, dataLoaded]);
+
+  // WrkFlow postMessage protocol listener
+  useEffect(() => {
+    function handle(event: MessageEvent) {
+      if (event.origin !== 'https://wrkflow-ai.vercel.app') return;
+      const { type, username, password } = event.data ?? {};
+      const src = event.source as Window;
+
+      if (type === 'WRKFLOW_INIT') {
+        src.postMessage({ type: 'COPYAI_READY' }, event.origin);
+      }
+
+      if (type === 'WRKFLOW_LOGIN') {
+        if (username === 'Jesse' && password === 'copyai') {
+          setLoggedIn(true);
+          src.postMessage({ type: 'COPYAI_LOGGED_IN' }, event.origin);
+        } else {
+          src.postMessage({ type: 'COPYAI_LOGIN_FAILED', error: 'Incorrect credentials' }, event.origin);
+        }
+      }
+
+      if (type === 'WRKFLOW_REQUEST_LIBRARY') {
+        if (dataLoadedRef.current) {
+          src.postMessage(
+            { type: 'COPYAI_LIBRARY', layouts: layoutsRef.current.map(mapToWrkFlowShape) },
+            event.origin
+          );
+        } else {
+          // Data not loaded yet — store the request and reply once Firestore finishes
+          pendingLibraryReqRef.current = { source: event.source!, origin: event.origin };
+        }
+      }
+    }
+
+    window.addEventListener('message', handle);
+    return () => window.removeEventListener('message', handle);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Respond to a pending WRKFLOW_REQUEST_LIBRARY once Firestore data is loaded
+  useEffect(() => {
+    if (!dataLoaded || !pendingLibraryReqRef.current) return;
+    const { source, origin } = pendingLibraryReqRef.current;
+    pendingLibraryReqRef.current = null;
+    (source as Window).postMessage(
+      { type: 'COPYAI_LIBRARY', layouts: layouts.map(mapToWrkFlowShape) },
+      origin
+    );
+  }, [dataLoaded, layouts]);
 
   // ----------- Utilities -----------
   function toast(msg: string, ms = 1600) {
@@ -336,10 +401,10 @@ export default function Page() {
     toast('Layout deleted');
   }
 
-  // ----------- Send layout to WrkFlow (embed mode) -----------
+  // ----------- Send layout to WrkFlow (embed mode, user clicked Open) -----------
   function sendToWrkFlow(layout: LayoutEntry) {
     window.parent.postMessage(
-      { type: 'copyai:layout', layout },
+      { type: 'COPYAI_LAYOUT_SELECTED', layout: mapToWrkFlowShape(layout) },
       'https://wrkflow-ai.vercel.app'
     );
     toast(`✓ Sent "${layout.title}" to WrkFlow`);
