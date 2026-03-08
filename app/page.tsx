@@ -336,6 +336,15 @@ export default function Page() {
     toast('Layout deleted');
   }
 
+  // ----------- Send layout to WrkFlow (embed mode) -----------
+  function sendToWrkFlow(layout: LayoutEntry) {
+    window.parent.postMessage(
+      { type: 'copyai:layout', layout },
+      'https://wrkflow-ai.vercel.app'
+    );
+    toast(`✓ Sent "${layout.title}" to WrkFlow`);
+  }
+
   // ----------- Import / Export -----------
   function exportJSON() {
     const blob = new Blob([JSON.stringify({ cards }, null, 2)], { type: 'application/json' });
@@ -539,6 +548,53 @@ export default function Page() {
       <div style={{ minHeight: '100svh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <Image src="/copyai_logo.png" alt="CopyAI logo" width={56} height={56} priority style={{ borderRadius: 12, opacity: 0.8 }} />
         <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading your prompts…</span>
+      </div>
+    );
+  }
+
+  // ----------- Embed mode: library-only view -----------
+  if (isEmbed) {
+    return (
+      <div style={{ minHeight: '100svh', background: BG, padding: '12px 12px 24px', boxSizing: 'border-box' }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10, paddingLeft: 2 }}>
+          Layouts
+        </div>
+        {layouts.length === 0 ? (
+          <div className="empty-state" style={{ padding: '32px 16px' }}>
+            <div className="empty-state-icon">📚</div>
+            <div className="empty-state-text">No saved layouts yet.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {layouts.map(l => (
+              <div
+                key={l.id}
+                style={{
+                  background: SURFACE,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  overflow: 'hidden',
+                }}
+              >
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.title}>
+                    {l.title}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {l.cards.length} prompt{l.cards.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                <button onClick={() => sendToWrkFlow(l)} className="btn-accent btn-sm" style={{ flex: '0 0 auto' }}>
+                  Open
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
