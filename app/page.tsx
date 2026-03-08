@@ -67,6 +67,12 @@ const MENU_ITEM_STYLE: React.CSSProperties = {
 };
 
 export default function Page() {
+  // ----------- Embed mode (?embed=true hides the header for iframe use) -----------
+  const [isEmbed, setIsEmbed] = useState(false);
+  useEffect(() => {
+    setIsEmbed(new URLSearchParams(window.location.search).get('embed') === 'true');
+  }, []);
+
   // ----------- State: auth -----------
   const [loggedIn, setLoggedIn] = useState(false);
   const [loginUser, setLoginUser] = useState('');
@@ -542,7 +548,7 @@ export default function Page() {
     <div style={{ minHeight: '100svh', background: BG }}>
 
       {/* ── Sticky Header ─────────────────────────────────────── */}
-      <header className="header-bar" style={{ justifyContent: 'center', position: 'relative' }}>
+      <header className="header-bar" style={{ justifyContent: 'center', position: 'relative', display: isEmbed ? 'none' : undefined }}>
 
         {/* Left: Hamburger menu */}
         <div style={{ position: 'absolute', left: 16, top: '50%', transform: 'translateY(-50%)' }}>
