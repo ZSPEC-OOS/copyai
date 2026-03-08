@@ -2,7 +2,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 
@@ -46,6 +46,15 @@ const LIB_BTN_STYLE: React.CSSProperties = {
   whiteSpace: 'nowrap',
   transition: 'all 0.15s ease',
 };
+
+// Map CopyAI's internal layout shape to what WrkFlow expects
+function mapToWrkFlowShape(layout: LayoutEntry) {
+  return {
+    id: layout.id,
+    title: layout.title,
+    prompts: layout.cards.map(c => ({ id: c.id, title: c.title, content: c.text })),
+  };
+}
 
 // Dropdown menu item style
 const MENU_ITEM_STYLE: React.CSSProperties = {
@@ -123,6 +132,14 @@ export default function Page() {
   const [showMenu, setShowMenu] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
+  // Refs so the WrkFlow message listener always sees current values without re-registering
+  const layoutsRef = useRef<LayoutEntry[]>(layouts);
+  useEffect(() => { layoutsRef.current = layouts; }, [layouts]);
+  const dataLoadedRef = useRef(false);
+  useEffect(() => { dataLoadedRef.current = dataLoaded; }, [dataLoaded]);
+  // If WRKFLOW_REQUEST_LIBRARY arrives before Firestore finishes loading, store it here
+  const pendingLibraryReqRef = useRef<{ source: MessageEventSource; origin: string } | null>(null);
+
   function toggleExpanded(id: string) {
     setExpanded(prev => {
       const next = new Set(prev);
@@ -156,6 +173,54 @@ export default function Page() {
     if (!dataLoaded) return;
     setDoc(doc(db, 'users', 'jesse'), { layouts }, { merge: true });
   }, [layouts, dataLoaded]);
+
+  // WrkFlow postMessage protocol listener
+  useEffect(() => {
+    function handle(event: MessageEvent) {
+      if (event.origin !== 'https://wrkflow-ai.vercel.app') return;
+      const { type, username, password } = event.data ?? {};
+      const src = event.source as Window;
+
+      if (type === 'WRKFLOW_INIT') {
+        src.postMessage({ type: 'COPYAI_READY' }, event.origin);
+      }
+
+      if (type === 'WRKFLOW_LOGIN') {
+        if (username === 'Jesse' && password === 'copyai') {
+          setLoggedIn(true);
+          src.postMessage({ type: 'COPYAI_LOGGED_IN' }, event.origin);
+        } else {
+          src.postMessage({ type: 'COPYAI_LOGIN_FAILED', error: 'Incorrect credentials' }, event.origin);
+        }
+      }
+
+      if (type === 'WRKFLOW_REQUEST_LIBRARY') {
+        if (dataLoadedRef.current) {
+          src.postMessage(
+            { type: 'COPYAI_LIBRARY', layouts: layoutsRef.current.map(mapToWrkFlowShape) },
+            event.origin
+          );
+        } else {
+          // Data not loaded yet — store the request and reply once Firestore finishes
+          pendingLibraryReqRef.current = { source: event.source!, origin: event.origin };
+        }
+      }
+    }
+
+    window.addEventListener('message', handle);
+    return () => window.removeEventListener('message', handle);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Respond to a pending WRKFLOW_REQUEST_LIBRARY once Firestore data is loaded
+  useEffect(() => {
+    if (!dataLoaded || !pendingLibraryReqRef.current) return;
+    const { source, origin } = pendingLibraryReqRef.current;
+    pendingLibraryReqRef.current = null;
+    (source as Window).postMessage(
+      { type: 'COPYAI_LIBRARY', layouts: layouts.map(mapToWrkFlowShape) },
+      origin
+    );
+  }, [dataLoaded, layouts]);
 
   // ----------- Utilities -----------
   function toast(msg: string, ms = 1600) {
@@ -334,6 +399,15 @@ export default function Page() {
     if (!confirm(`Delete layout?\n\n${lay.title}`)) return;
     setLayouts(prev => prev.filter(l => l.id !== id));
     toast('Layout deleted');
+  }
+
+  // ----------- Send layout to WrkFlow (embed mode, user clicked Open) -----------
+  function sendToWrkFlow(layout: LayoutEntry) {
+    window.parent.postMessage(
+      { type: 'COPYAI_LAYOUT_SELECTED', layout: mapToWrkFlowShape(layout) },
+      'https://wrkflow-ai.vercel.app'
+    );
+    toast(`✓ Sent "${layout.title}" to WrkFlow`);
   }
 
   // ----------- Import / Export -----------
@@ -539,6 +613,53 @@ export default function Page() {
       <div style={{ minHeight: '100svh', background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16 }}>
         <Image src="/copyai_logo.png" alt="CopyAI logo" width={56} height={56} priority style={{ borderRadius: 12, opacity: 0.8 }} />
         <span style={{ color: 'var(--text-muted)', fontSize: 14 }}>Loading your prompts…</span>
+      </div>
+    );
+  }
+
+  // ----------- Embed mode: library-only view -----------
+  if (isEmbed) {
+    return (
+      <div style={{ minHeight: '100svh', background: BG, padding: '12px 12px 24px', boxSizing: 'border-box' }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-muted)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: 10, paddingLeft: 2 }}>
+          Layouts
+        </div>
+        {layouts.length === 0 ? (
+          <div className="empty-state" style={{ padding: '32px 16px' }}>
+            <div className="empty-state-icon">📚</div>
+            <div className="empty-state-text">No saved layouts yet.</div>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {layouts.map(l => (
+              <div
+                key={l.id}
+                style={{
+                  background: SURFACE,
+                  border: `1px solid ${BORDER}`,
+                  borderRadius: 10,
+                  padding: '10px 12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  overflow: 'hidden',
+                }}
+              >
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                  <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.title}>
+                    {l.title}
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {l.cards.length} prompt{l.cards.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                <button onClick={() => sendToWrkFlow(l)} className="btn-accent btn-sm" style={{ flex: '0 0 auto' }}>
+                  Open
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
