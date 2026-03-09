@@ -82,6 +82,11 @@ export default function Page() {
     setIsEmbed(new URLSearchParams(window.location.search).get('embed') === 'true');
   }, []);
 
+  // Signal to wrkflow that the page is ready (must fire on mount, before any message arrives)
+  useEffect(() => {
+    window.parent.postMessage({ type: 'COPYAI_READY' }, 'https://www.wrkflow-ai.com');
+  }, []);
+
   // ----------- State: auth -----------
   const [loggedIn, setLoggedIn] = useState(false);
   const [loginUser, setLoginUser] = useState('');
@@ -177,12 +182,12 @@ export default function Page() {
   // WrkFlow postMessage protocol listener
   useEffect(() => {
     function handle(event: MessageEvent) {
-      if (event.origin !== 'https://wrkflow-ai.vercel.app') return;
+      if (event.origin !== 'https://www.wrkflow-ai.com') return;
       const { type, username, password } = event.data ?? {};
       const src = event.source as Window;
 
       if (type === 'WRKFLOW_INIT') {
-        src.postMessage({ type: 'COPYAI_READY' }, event.origin);
+        // wrkflow is ready — no action needed; COPYAI_READY was already sent on mount
       }
 
       if (type === 'WRKFLOW_LOGIN') {
@@ -405,7 +410,7 @@ export default function Page() {
   function sendToWrkFlow(layout: LayoutEntry) {
     window.parent.postMessage(
       { type: 'COPYAI_LAYOUT_SELECTED', layout: mapToWrkFlowShape(layout) },
-      'https://wrkflow-ai.vercel.app'
+      'https://www.wrkflow-ai.com'
     );
     toast(`✓ Sent "${layout.title}" to WrkFlow`);
   }
