@@ -84,7 +84,7 @@ export default function Page() {
 
   // Signal to wrkflow that the page is ready (must fire on mount, before any message arrives)
   useEffect(() => {
-    window.parent.postMessage({ type: 'COPYAI_READY' }, 'https://www.wrkflow-ai.com');
+    window.parent.postMessage({ type: 'COPYAI_READY' }, 'https://wolfkrow.onrender.com');
   }, []);
 
   // ----------- State: auth -----------
@@ -182,7 +182,7 @@ export default function Page() {
   // WrkFlow postMessage protocol listener
   useEffect(() => {
     function handle(event: MessageEvent) {
-      if (event.origin !== 'https://www.wrkflow-ai.com') return;
+      if (event.origin !== 'https://wolfkrow.onrender.com') return;
       const { type, username, password } = event.data ?? {};
       const src = event.source as Window;
 
@@ -410,7 +410,7 @@ export default function Page() {
   function sendToWrkFlow(layout: LayoutEntry) {
     window.parent.postMessage(
       { type: 'COPYAI_LAYOUT_SELECTED', layout: mapToWrkFlowShape(layout) },
-      'https://www.wrkflow-ai.com'
+      'https://wolfkrow.onrender.com'
     );
     toast(`✓ Sent "${layout.title}" to WrkFlow`);
   }
